@@ -2,8 +2,13 @@ Sprint 1 - Starting week of 9/9/2025, ending 9/16/2025
 Actionable Deliverables:
 1. Project Structure
 2. Required packages and start of a 'requirements.txt' file.
-3. Start of the baseline code with initial data processing.
+3. Start of the baseline code for transformer
   + Splitting the data into train, validation, and test sets.
   + Review split data for class disparaties
-  + Variable metrics that are explainable with diagrams
-4. First pass of creating the binary 'Machine Failure' classification model training.
+  + Variable metrics
+  + Using 'from scratch' tutorial to learn the basics and create a baseline.
+4. Prepare being able to explain and review the transformer for further feedback on 9/16/2025.
+
+Sprint 2 - Starting week of 9/16/2025, ending 9/23/2025
+Actionable Deliverables:
+1. Evaluation metrics
