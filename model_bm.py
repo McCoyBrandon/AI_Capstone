@@ -18,8 +18,8 @@ NUM_COLS = [                      # 5 numeric features
     "Air temperature [K]",
     "Process temperature [K]",
     "Rotational speed [rpm]",
-    "Torque [Nm]",
-    "Tool wear [min]",
+    "Torque [Num]",
+    "Tool wear [Num]",
 ]
 CAT_COL = "Type"                  # Single categorical feature (values like L/M/H)
 TARGET = "Machine failure"        # Binary target column (0 or 1)
@@ -83,7 +83,7 @@ te_ds = TensorDataset(
 tr_dl = DataLoader(tr_ds, batch_size=BATCH, shuffle=True)   # shuffle test data
 te_dl = DataLoader(te_ds, batch_size=BATCH, shuffle=False)  # no need to shuffle test
 
-### Model Definnition
+### Model Definition
 class TinyTabTransformer(nn.Module):
     def __init__(self, n_num, type_vocab, d_model=64, nhead=2):
         super().__init__()
