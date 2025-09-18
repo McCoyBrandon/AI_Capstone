@@ -11,4 +11,11 @@ Actionable Deliverables:
 
 Sprint 2 - Starting week of 9/16/2025, ending 9/23/2025
 Actionable Deliverables:
-1. Evaluation metrics
+1. Brandon
+a. Add the type of machine failure? (multi-classification)
+b. Evaluation metrics
+
+2. Venugopal
+a. Computing metrics
+b. Updating repository to match provided recommendations
+
