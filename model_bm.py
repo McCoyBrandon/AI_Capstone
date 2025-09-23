@@ -9,7 +9,9 @@ import numpy as np
 import pandas as pd               
 import torch                     
 import torch.nn as nn             
-from torch.utils.data import TensorDataset, DataLoader  
+from torch.utils.data import TensorDataset, DataLoader 
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import  accuracy_score, balanced_accuracy_score, classification_report, confusion_matrix, roc_auc_score
 
 ### Starting Variables
 ## Variables for the data
@@ -18,11 +20,15 @@ NUM_COLS = [                      # 5 numeric features
     "Air temperature [K]",
     "Process temperature [K]",
     "Rotational speed [rpm]",
-    "Torque [Num]",
-    "Tool wear [Num]",
+    "Torque [Nm]",
+    "Tool wear [min]",
 ]
 CAT_COL = "Type"                  # Single categorical feature (values like L/M/H)
 TARGET = "Machine failure"        # Binary target column (0 or 1)
+FAILURE_COLS = ["TWF", "HDF", "PWF", "OSF", "RNF"] # Columns for multi-classifcation
+CLASS_NAMES  = ["NoFailure", "TWF", "HDF", "PWF", "OSF", "RNF"] # Classifiers for multi-classification
+N_CLASSES    = len(CLASS_NAMES)
+
 # Hyperparameters for the model
 BATCH = 256                       # Mini-batch size for training/eval
 EPOCHS = 10                       # Number of passes over the training data
@@ -35,15 +41,42 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if present, e
 ### Load & Prepare Data
 # Read the CSV into a pandas DataFrame
 df = pd.read_csv(CSV_PATH)
+print(sorted(df.columns)) # DEBUGGGING dataset column check
 
-# Extract numeric features
-X_num = df[NUM_COLS].values.astype(np.float32)
+# DEBUGGING for column name issues
+required_cols = set(NUM_COLS + [CAT_COL, TARGET] + FAILURE_COLS)
+missing = list(required_cols - set(df.columns))
+if missing:
+    raise ValueError(f"Missing expected columns in CSV: {missing}")
 
-# Convert "Type" to categorical codes (L = 0, M = 1, H = 2)
-type_idx = df[CAT_COL].astype("category").cat.codes.values.astype(np.int64)
+# Extract features
+X_num = df[NUM_COLS].values.astype(np.float32) # Numeric
+cat_idx = df[CAT_COL].astype("category").cat.codes.values.astype(np.int64) # Convert "Type" to categorical codes (L = 0, M = 1, H = 2)
+type_vocab = int(cat_idx.max()) + 1
 
 # Extract target as float32: shape [N]; BCEWithLogitsLoss expects float targets
-y = df[TARGET].values.astype(np.float32)
+y_bin = df[TARGET].values.astype(np.int64) # 0/1 (used for binary AUROC and for building y_cls)
+
+# Build 6-class target 0..5: 0=NoFailure, 1..5 = TWF/HDF/PWF/OSF/RNF
+fails = df[FAILURE_COLS].values.astype(np.int64) # shape [N,5]
+y_cls = np.zeros(len(df), dtype=np.int64) # default 0 (NoFailure)
+mask_fail = (y_bin == 1)
+if mask_fail.any():
+    # Resolve multi-flag rows with fixed priority
+    # Priority based opn FAILURE_COLS order: TWF > HDF > PWF > OSF > RNF
+    priority = np.array([0, 1, 2, 3, 4], dtype=np.int64)
+    sub = fails[mask_fail]
+    # choose first True in priority order; if none set (shouldn't happen when y_bin==1), default to 0
+    chosen = np.argmax(sub[:, priority] == 1, axis=1)
+    none_set = (sub.sum(axis=1) == 0)
+    chosen[none_set] = 0
+    y_cls[mask_fail] = chosen + 1
+    
+# DEBUGGING Inspect multi-flag rows count
+multi_mask = (fails.sum(axis=1) > 1) & mask_fail
+multi_count = int(multi_mask.sum())
+if multi_count > 0:
+    print(f"[DEBUGGING] {multi_count} rows have multiple failure types; resolved by priority {FAILURE_COLS}.")
 
 ## Train/Test Split (80/20, random)
 # !!!! Will need to feature review to make sure values are properly distributed for statistical significance
@@ -52,6 +85,10 @@ idx = np.random.permutation(N)      # random indices
 n_train = int(0.7 * N)              # 70% for training
 tr, te = idx[:n_train], idx[n_train:]  # train indices, test indices
 
+""""
+###
+# Commented out section to develope multi-classification retaining in case of need.
+###
 # Slice arrays into train/test sets
 Xn_tr, Xn_te = X_num[tr], X_num[te]
 ty_tr, ty_te = type_idx[tr], type_idx[te]
@@ -77,6 +114,28 @@ te_ds = TensorDataset(
     torch.tensor(Xn_te),
     torch.tensor(ty_te),
     torch.tensor(y_te),
+)
+"""
+# Stratify by y_cls
+Xn_tr, Xn_te, ty_tr, ty_te, y_tr, y_te, yb_tr, yb_te = train_test_split(
+X_num, cat_idx, y_cls, y_bin, test_size=0.20, random_state=42, stratify=y_cls 
+)
+
+# Standardize numeric features using TRAIN statistics only
+mean, std = Xn_tr.mean(axis=0), Xn_tr.std(axis=0) + 1e-8
+Xn_tr = (Xn_tr - mean) / std
+Xn_te = (Xn_te - mean) / std
+
+# Tensors & DataLoaders
+tr_ds = TensorDataset(
+torch.tensor(Xn_tr, dtype=torch.float32),
+torch.tensor(ty_tr, dtype=torch.int64),
+torch.tensor(y_tr, dtype=torch.int64),
+)
+te_ds = TensorDataset(
+torch.tensor(Xn_te, dtype=torch.float32),
+torch.tensor(ty_te, dtype=torch.int64),
+torch.tensor(y_te, dtype=torch.int64),
 )
 
 # DataLoaders handle batching and shuffling
@@ -112,8 +171,8 @@ class TinyTabTransformer(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(enc, num_layers=1)
 
-        # Linear head that maps the [CLS] hidden state to a single logit for binary classification
-        self.head = nn.Linear(d_model, 1)
+        # Linear head that maps the [CLS] hidden state adjusted to the multi-classifaction
+        self.head = nn.Linear(d_model, N_CLASSES)
 
     def forward(self, x_num, x_type):
         """
@@ -146,7 +205,7 @@ class TinyTabTransformer(nn.Module):
         return logit
 
 # Compute the categorical vocabulary size from the data (max index + 1)
-type_vocab = int(type_idx.max()) + 1
+type_vocab = int(cat_idx.max()) + 1
 
 # Instantiate the model and move to device
 model = TinyTabTransformer(len(NUM_COLS), type_vocab, D_MODEL, NHEAD).to(DEVICE)
@@ -155,8 +214,8 @@ model = TinyTabTransformer(len(NUM_COLS), type_vocab, D_MODEL, NHEAD).to(DEVICE)
 # Adam optimizer over all model parameters
 opt = torch.optim.Adam(model.parameters(), lr=LR)
 
-# Binary cross-entropy with logits: combines sigmoid + BCE
-loss_fn = nn.BCEWithLogitsLoss()
+# Adjusted loss to suit for a multi-class
+loss_fn = nn.CrossEntropyLoss() 
 
 ### Training Loop
 for epoch in range(1, EPOCHS + 1):
@@ -172,7 +231,7 @@ for epoch in range(1, EPOCHS + 1):
 
         opt.zero_grad()                           # reset gradients from previous
         logits = model(xb_num, xb_type)           # forward pass -> [B]
-        loss = loss_fn(logits, yb)                # compute loss (scalar)
+        loss = loss_fn(logits, yb)                # compute loss 
         loss.backward()                           # backprop: compute gradients
         opt.step()                                # update parameters with Adam
 
@@ -184,6 +243,76 @@ for epoch in range(1, EPOCHS + 1):
     print(f"Epoch {epoch}/{EPOCHS} - train loss: {total / count:.4f}")
 
 ### Evaluation on Test Set
+# Using the new multi-class evaluation with a Binary check at the end.
+model.eval()
+all_logits, all_y = [], []
+with torch.no_grad():
+    for xb_num, xb_type, yb in te_dl:
+        xb_num  = xb_num.to(DEVICE)
+        xb_type = xb_type.to(DEVICE)
+        logits  = model(xb_num, xb_type)   # [B, C]
+        all_logits.append(logits.cpu())
+        all_y.append(yb.cpu())
+
+all_logits = torch.cat(all_logits, dim=0).numpy()  # [Nte, C]
+all_y = torch.cat(all_y, dim=0).numpy()            # [Nte]
+probs = torch.softmax(torch.tensor(all_logits), dim=1).numpy()
+preds = probs.argmax(axis=1)
+
+# Core metrics
+acc  = accuracy_score(all_y, preds)
+bacc = balanced_accuracy_score(all_y, preds)
+print(f"Test accuracy: {acc:.4f}")
+print(f"Balanced accuracy: {bacc:.4f}")
+print("\nClassification report:")
+print(classification_report(all_y, preds, target_names=CLASS_NAMES))
+print("Confusion matrix (rows=true, cols=pred):")
+print(confusion_matrix(all_y, preds))
+
+# AUROC
+Y_true_ovr = np.zeros((all_y.shape[0], N_CLASSES), dtype=np.int64)
+Y_true_ovr[np.arange(all_y.shape[0]), all_y] = 1
+
+print("\nPer-class AUROC:")
+per_class_auc = {}
+for i, name in enumerate(CLASS_NAMES):
+    try:
+        auc_i = roc_auc_score(Y_true_ovr[:, i], probs[:, i])
+        per_class_auc[name] = auc_i
+        print(f"  {name:>10s}: {auc_i:.4f}")
+    except ValueError:
+        per_class_auc[name] = float("nan")
+        print(f"  {name:>10s}: N/A (absent in test)")
+
+# macro/micro/weighted AUC
+try:
+    macro_auc   = roc_auc_score(Y_true_ovr, probs, multi_class="ovr", average="macro")
+    micro_auc   = roc_auc_score(Y_true_ovr, probs, multi_class="ovr", average="micro")
+    weighted_auc= roc_auc_score(Y_true_ovr, probs, multi_class="ovr", average="weighted")
+    print(f"\nMacro AUROC:    {macro_auc:.4f}") 
+    print(f"Micro AUROC:    {micro_auc:.4f}")
+    print(f"Weighted AUROC: {weighted_auc:.4f}")
+# DEBUGGING Evaluation metric output
+except ValueError:
+    print("\nMacro/Micro/Weighted AUROC unavailable (degenerate labels).")
+
+# Binary AUROC for your original TARGET (keep using y you already had) ---
+# Collapse multi-class probs to “any failure” vs “no failure”: class 0 = NoFailure; classes 1..5 = failures)
+p_any_fail = probs[:, 1:].sum(axis=1)          # P(failure)
+# build ground truth from y_te (re-slice your saved binary y if needed)
+y_binary_te = (all_y != 0).astype(int)        # from multiclass truth: 0 vs 1..5
+try:
+    bin_auc = roc_auc_score(y_binary_te, p_any_fail)
+    print(f"\nBinary AUROC (TARGET='{TARGET}'): {bin_auc:.4f}")
+# DEBUGGING Evaluation metric output
+except ValueError:
+    print(f"\nBinary AUROC (TARGET='{TARGET}') unavailable.")
+
+
+"""
+###
+# Binary classifcation saved for reference, may remove later
+###
 model.eval()                        # set eval mode (e.g., disables dropout; not used here)
 correct = 0                         # Track number of correct predictions
 tot = 0                             # Track total number of samples
@@ -205,3 +334,4 @@ with torch.no_grad():               # no gradient tracking needed for evaluation
 
 # Output final accuracy on the test split
 print(f"Test accuracy: {correct / tot:.4f}")
+"""
