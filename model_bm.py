@@ -265,9 +265,10 @@ bacc = balanced_accuracy_score(all_y, preds)
 print(f"Test accuracy: {acc:.4f}")
 print(f"Balanced accuracy: {bacc:.4f}")
 print("\nClassification report:")
-print(classification_report(all_y, preds, target_names=CLASS_NAMES))
+# DEBUGGING Reviewing Classifications showing up
+print(classification_report(all_y,preds,labels=list(range(N_CLASSES)),target_names=CLASS_NAMES,zero_division=0))
 print("Confusion matrix (rows=true, cols=pred):")
-print(confusion_matrix(all_y, preds))
+print(confusion_matrix(all_y, preds, labels=list(range(N_CLASSES))))
 
 # AUROC
 Y_true_ovr = np.zeros((all_y.shape[0], N_CLASSES), dtype=np.int64)
