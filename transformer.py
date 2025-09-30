@@ -9,9 +9,9 @@ import numpy as np
 import pandas as pd               
 import torch                     
 import torch.nn as nn             
-from torch.utils.data import TensorDataset, DataLoader 
+from torch.utils.data import TensorDataset, DataLoader, WeightedRandomSampler
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import  accuracy_score, balanced_accuracy_score, classification_report, confusion_matrix, roc_auc_score
+from sklearn.metrics import  accuracy_score, balanced_accuracy_score, classification_report, confusion_matrix, roc_auc_score, f1_score
 
 ### Starting Variables
 ## Variables for the data
@@ -126,6 +126,22 @@ mean, std = Xn_tr.mean(axis=0), Xn_tr.std(axis=0) + 1e-8
 Xn_tr = (Xn_tr - mean) / std
 Xn_te = (Xn_te - mean) / std
 
+## Class imbalance handling
+# Compute class counts on TRAIN and derive weights
+class_counts = np.bincount(y_tr, minlength=N_CLASSES)
+eps = 1e-6
+class_weights_np = class_counts.max() / (class_counts + eps)
+class_weights = torch.tensor(class_weights_np, dtype=torch.float32, device=DEVICE)
+
+# Per-sample weights for WeightedRandomSampler 
+sample_weights_np = 1.0 / (class_counts[y_tr] + eps)
+sample_weights = torch.tensor(sample_weights_np, dtype=torch.float32)
+
+# Weighted sampler to draw more minority-class examples each epoch
+sampler = WeightedRandomSampler(weights=sample_weights,
+                                num_samples=len(sample_weights),
+                                replacement=True)
+
 # Tensors & DataLoaders
 tr_ds = TensorDataset(
 torch.tensor(Xn_tr, dtype=torch.float32),
@@ -139,7 +155,7 @@ torch.tensor(y_te, dtype=torch.int64),
 )
 
 # DataLoaders handle batching and shuffling
-tr_dl = DataLoader(tr_ds, batch_size=BATCH, shuffle=True)   # shuffle test data
+tr_dl = DataLoader(tr_ds, batch_size=BATCH, sampler=sampler)   # weighted sampling for class balance
 te_dl = DataLoader(te_ds, batch_size=BATCH, shuffle=False)  # no need to shuffle test
 
 ### Model Definition
@@ -214,8 +230,8 @@ model = TinyTabTransformer(len(NUM_COLS), type_vocab, D_MODEL, NHEAD).to(DEVICE)
 # Adam optimizer over all model parameters
 opt = torch.optim.Adam(model.parameters(), lr=LR)
 
-# Adjusted loss to suit for a multi-class
-loss_fn = nn.CrossEntropyLoss() 
+# Adjusted loss to suit for a multi-class, class imbalance balancing with class weights
+loss_fn = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.05)
 
 ### Training Loop
 for epoch in range(1, EPOCHS + 1):
@@ -243,7 +259,11 @@ for epoch in range(1, EPOCHS + 1):
     print(f"Epoch {epoch}/{EPOCHS} - train loss: {total / count:.4f}")
 
 ### Evaluation on Test Set
-# Using the new multi-class evaluation with a Binary check at the end.
+# Prior logit adjustment to counter class bias
+priors = class_counts / class_counts.sum()
+log_prior = torch.log(torch.tensor(priors, dtype=torch.float32, device=DEVICE))
+
+# Using the new multi-class evaluation with a Binary check at the end. And intruduce logits adjustment for class imbalance.
 model.eval()
 all_logits, all_y = [], []
 with torch.no_grad():
@@ -251,6 +271,7 @@ with torch.no_grad():
         xb_num  = xb_num.to(DEVICE)
         xb_type = xb_type.to(DEVICE)
         logits  = model(xb_num, xb_type)   # [B, C]
+        logits  = logits - log_prior       # adjust by log priors
         all_logits.append(logits.cpu())
         all_y.append(yb.cpu())
 
@@ -263,6 +284,9 @@ preds = probs.argmax(axis=1)
 acc  = accuracy_score(all_y, preds)
 bacc = balanced_accuracy_score(all_y, preds)
 print(f"Test accuracy: {acc:.4f}")
+macro_f1 = f1_score(all_y, preds, average="macro", zero_division=0)
+weighted_f1 = f1_score(all_y, preds, average="weighted", zero_division=0)
+print(f"Macro F1: {macro_f1:.4f} | Weighted F1: {weighted_f1:.4f}")
 print(f"Balanced accuracy: {bacc:.4f}")
 print("\nClassification report:")
 # DEBUGGING Reviewing Classifications showing up
