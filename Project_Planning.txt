@@ -19,3 +19,15 @@ b. Evaluation metrics
 a. Computing metrics
 b. Updating repository to match provided recommendations
 
+Sprint 3 - Starting week of 9/23/2025, ending 9/30/2025
+Actionable Deliverables:
+1. Brandon
+a. Resolve ongoing multi-class column issues.
+b. Expand evaluation metrics to class imbalance
+c. Address class imbalance issues
+d. Read through provided DevOps material to consider additional training metrics needed for presentation
+2. Venugopal
+a. Updating repository to match provided recommendations in DevOps material
+b. Have model save pretrained weights
+c. Create file that uses pre-trained model and run against test dat
+d. Computing metrics
