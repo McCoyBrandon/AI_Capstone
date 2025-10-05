@@ -32,7 +32,7 @@ N_CLASSES    = len(CLASS_NAMES)
 # Hyperparameters for the model
 BATCH = 256                       # Mini-batch size for training/eval
 EPOCHS = 10                       # Number of passes over the training data
-LR = 1e-3                         # Adam learning rate
+LR = 3e-4                         # Adam learning rate
 D_MODEL = 64                      # Token embedding size (hidden size)
 NHEAD = 2                         # Number of attention heads (must divide D_MODEL)
 # Processing managagement
@@ -129,18 +129,13 @@ Xn_te = (Xn_te - mean) / std
 ## Class imbalance handling
 # Compute class counts on TRAIN and derive weights
 class_counts = np.bincount(y_tr, minlength=N_CLASSES)
-eps = 1e-6
-class_weights_np = class_counts.max() / (class_counts + eps)
+beta = 0.999
+eff_num = 1.0 - np.power(beta, np.maximum(class_counts, 1))
+class_weights_np = (1.0 - beta) / (eff_num + 1e-12)
+class_weights_np = class_weights_np / class_weights_np.mean()  # normalize (mean≈1)
 class_weights = torch.tensor(class_weights_np, dtype=torch.float32, device=DEVICE)
-
-# Per-sample weights for WeightedRandomSampler 
-sample_weights_np = 1.0 / (class_counts[y_tr] + eps)
-sample_weights = torch.tensor(sample_weights_np, dtype=torch.float32)
-
-# Weighted sampler to draw more minority-class examples each epoch
-sampler = WeightedRandomSampler(weights=sample_weights,
-                                num_samples=len(sample_weights),
-                                replacement=True)
+print("Train class counts:", dict(zip(CLASS_NAMES, class_counts.tolist())))
+print("Test  class counts:", dict(zip(CLASS_NAMES, np.bincount(y_te, minlength=N_CLASSES).tolist())))
 
 # Tensors & DataLoaders
 tr_ds = TensorDataset(
@@ -155,7 +150,7 @@ torch.tensor(y_te, dtype=torch.int64),
 )
 
 # DataLoaders handle batching and shuffling
-tr_dl = DataLoader(tr_ds, batch_size=BATCH, sampler=sampler)   # weighted sampling for class balance
+tr_dl = DataLoader(tr_ds, batch_size=BATCH, shuffle=True)      # class weights only
 te_dl = DataLoader(te_ds, batch_size=BATCH, shuffle=False)  # no need to shuffle test
 
 ### Model Definition
@@ -231,7 +226,7 @@ model = TinyTabTransformer(len(NUM_COLS), type_vocab, D_MODEL, NHEAD).to(DEVICE)
 opt = torch.optim.Adam(model.parameters(), lr=LR)
 
 # Adjusted loss to suit for a multi-class, class imbalance balancing with class weights
-loss_fn = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.05)
+loss_fn = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.0)
 
 ### Training Loop
 for epoch in range(1, EPOCHS + 1):
@@ -249,6 +244,7 @@ for epoch in range(1, EPOCHS + 1):
         logits = model(xb_num, xb_type)           # forward pass -> [B]
         loss = loss_fn(logits, yb)                # compute loss 
         loss.backward()                           # backprop: compute gradients
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         opt.step()                                # update parameters with Adam
 
         # Track running loss (!!!multiply by batch size to average later!!!)
@@ -259,10 +255,6 @@ for epoch in range(1, EPOCHS + 1):
     print(f"Epoch {epoch}/{EPOCHS} - train loss: {total / count:.4f}")
 
 ### Evaluation on Test Set
-# Prior logit adjustment to counter class bias
-priors = class_counts / class_counts.sum()
-log_prior = torch.log(torch.tensor(priors, dtype=torch.float32, device=DEVICE))
-
 # Using the new multi-class evaluation with a Binary check at the end. And intruduce logits adjustment for class imbalance.
 model.eval()
 all_logits, all_y = [], []
@@ -271,7 +263,6 @@ with torch.no_grad():
         xb_num  = xb_num.to(DEVICE)
         xb_type = xb_type.to(DEVICE)
         logits  = model(xb_num, xb_type)   # [B, C]
-        logits  = logits - log_prior       # adjust by log priors
         all_logits.append(logits.cpu())
         all_y.append(yb.cpu())
 

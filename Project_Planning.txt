@@ -31,3 +31,13 @@ a. Updating repository to match provided recommendations in DevOps material
 b. Have model save pretrained weights
 c. Create file that uses pre-trained model and run against test dat
 d. Computing metrics
+
+Sprint 4 - Starting week of 9/30/2025, ending 10/7/2025
+1. Brandon
+
+
+2. Venugopal
+a. Updating repository to match provided recommendations in DevOps material
+b. Have model save pretrained weights
+c. Create file that uses pre-trained model and run against test dat
+d. Computing metrics
