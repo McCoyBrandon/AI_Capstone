@@ -45,3 +45,15 @@ a. Continued maintenance on the GitHub repository
 b. Have model save pretrained weights
 c. Continue computing metrics review
 d. Documentation review, seeing where we need to update and depreciate
+
+Sprint 5 - Starting week of 10/7/2025, ending 10/14/2025
+1. Brandon
+a. Fitting split out documents into the updated repository structure
+b. Build run file to be used for presenting the model
+c. Update README documentation for the build run file
+c. Collaborate on the TensorBoard with Venugopal
+
+2. Venugopal
+a. Finalize computing metrics on the evaluation run
+b. Start on the TensorBoard usage in the training and evaluation runs
+c. Review documentation and commenting
