@@ -79,43 +79,11 @@ if multi_count > 0:
     print(f"[DEBUGGING] {multi_count} rows have multiple failure types; resolved by priority {FAILURE_COLS}.")
 
 ## Train/Test Split (80/20, random)
-# !!!! Will need to feature review to make sure values are properly distributed for statistical significance
 N = len(df)                         # total number of rows
 idx = np.random.permutation(N)      # random indices
 n_train = int(0.7 * N)              # 70% for training
 tr, te = idx[:n_train], idx[n_train:]  # train indices, test indices
 
-""""
-###
-# Commented out section to develope multi-classification retaining in case of need.
-###
-# Slice arrays into train/test sets
-Xn_tr, Xn_te = X_num[tr], X_num[te]
-ty_tr, ty_te = type_idx[tr], type_idx[te]
-y_tr,  y_te  = y[tr], y[te]
-
-# Standardization
-# Compute mean and std for training data
-m, s = Xn_tr.mean(0), Xn_tr.std(0) + 1e-8   # add epsilon to avoid divide-by-zero
-
-# Apply standardization to train and test (test uses train's m and s)
-Xn_tr = (Xn_tr - m) / s
-Xn_te = (Xn_te - m) / s
-
-## Build Tensors and DataLoaders
-# Wrap numpy arrays into torch.Tensors; keep dtypes consistent with the model:
-# - numeric features float32, categorical indices int64, targets float32
-tr_ds = TensorDataset(
-    torch.tensor(Xn_tr),           # shape [N_train, 5], dtype float32
-    torch.tensor(ty_tr),           # shape [N_train],    dtype int64
-    torch.tensor(y_tr),            # shape [N_train],    dtype float32
-)
-te_ds = TensorDataset(
-    torch.tensor(Xn_te),
-    torch.tensor(ty_te),
-    torch.tensor(y_te),
-)
-"""
 # Stratify by y_cls
 Xn_tr, Xn_te, ty_tr, ty_te, y_tr, y_te, yb_tr, yb_te = train_test_split(
 X_num, cat_idx, y_cls, y_bin, test_size=0.20, random_state=42, stratify=y_cls 
@@ -193,10 +161,7 @@ class TinyTabTransformer(nn.Module):
         """
         B, n_num = x_num.shape  # batch size and number of numeric features
 
-        # Create numeric tokens by applying the per-feature affine transform:
-        # x_num.unsqueeze(-1): [B, n_num, 1]
-        # self.W.unsqueeze(0): [1, n_num, d_model]  (broadcast to [B, n_num, d_model])
-        # self.b.unsqueeze(0): [1, n_num, d_model]
+        # Create numeric tokens
         num_tok = x_num.unsqueeze(-1) * self.W.unsqueeze(0) + self.b.unsqueeze(0)  # [B, n_num, d_model]
 
         # Embed the categorical feature and make it a length-1 token sequence:
@@ -323,31 +288,3 @@ try:
 # DEBUGGING Evaluation metric output
 except ValueError:
     print(f"\nBinary AUROC (TARGET='{TARGET}') unavailable.")
-
-
-"""
-###
-# Binary classifcation saved for reference, may remove later
-###
-model.eval()                        # set eval mode (e.g., disables dropout; not used here)
-correct = 0                         # Track number of correct predictions
-tot = 0                             # Track total number of samples
-
-with torch.no_grad():               # no gradient tracking needed for evaluation
-    for xb_num, xb_type, yb in te_dl:
-        xb_num  = xb_num.to(DEVICE)
-        xb_type = xb_type.to(DEVICE)
-        yb      = yb.to(DEVICE)
-
-        # Model returns raw logits; apply sigmoid to get probabilities in [0,1]
-        probs = torch.sigmoid(model(xb_num, xb_type))  # [B]
-        # Convert probabilities to class predictions using 0.5 threshold
-        preds = (probs >= 0.5).float()                 # [B], 0.0 or 1.0
-
-        # Count how many match the ground truth
-        correct += (preds == yb).sum().item()
-        tot += yb.numel()
-
-# Output final accuracy on the test split
-print(f"Test accuracy: {correct / tot:.4f}")
-"""
