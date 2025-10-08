@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 
 ### Starting Variables
 ## Variables for the data
-CSV_PATH = "ai4i2020.csv"         # Expect the UCI CSV to be in the same folder, will need to adjust when we restructure the folders.
+CSV_PATH = "src.data.ai4i2020.csv"         # Expect the UCI CSV to be in the same folder, will need to adjust when we restructure the folders.
 NUM_COLS = [                      # 5 numeric features
     "Air temperature [K]",
     "Process temperature [K]",
