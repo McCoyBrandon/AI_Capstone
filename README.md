@@ -6,6 +6,15 @@
 
 ---
 
+## Demo:
+In terminal at the root directory:
+- python -m src.training.demo
+
+
+
+
+---
+
 ## Introduction
 Datacenter downtimes can cause huge financial losses. Having humans track second-by-second diagnostics for a datacenter with thousands of machines on a 24/7 basis can be expensive and may cost as much as the potential downtimes themselves. The need for a tracking system that can be run by a small team and is more cost-efficient is increasingly important in the modern world.
 
