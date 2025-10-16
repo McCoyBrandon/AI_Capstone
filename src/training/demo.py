@@ -35,12 +35,15 @@ parser.add_argument("--out", type=str, default="runs/ai4i_run_1/demo_metrics.jso
                     help="Where to save evaluation metrics JSON")
 parser.add_argument("--failures-out", type=str, default="runs/ai4i_run_1/flagged_failures.json",
                     help="Optional JSON list of test-set machines predicted to fail")
+parser.add_argument("--failures-csv", type=str, default="runs/ai4i_run_1/flagged_failures.csv",
+                    help="CSV of test rows predicted to fail (product_id, binary, failure_type)")                    
 args = parser.parse_args()
 
 CKPT_PATH    = args.ckpt
 CSV_PATH     = args.csv
 OUT_PATH     = args.out
 FAIL_LIST_OUT= args.failures_out
+FAILURES_CSV = args.failures_csv
 
 # Setting up device
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -92,10 +95,15 @@ if mask_fail.any():
     chosen[none_set] = 0
     y_cls[mask_fail] = chosen + 1
 
+# Keep original row indices so we can map back to product key from source data
+row_idx = np.arange(len(df))
+
 # Recreate the same stratified split (random_state=42) used in data_loader.py
-_, Xn_te, _, ty_te, _, y_te, _, yb_te = train_test_split(
-    X_num, cat_idx, y_cls, y_bin, test_size=0.20, random_state=42, stratify=y_cls
+_, Xn_te, _, ty_te, _, y_te, _, yb_te, _, idx_te = train_test_split(
+    X_num, cat_idx, y_cls, y_bin, row_idx,  # Added the row index which won't be used by the model, but can be used to backtrack to the productID
+    test_size=0.20, random_state=42, stratify=y_cls   # Splitting hyperparameters
 )
+
 
 # Standardize numeric features using TRAIN statistics from checkpoint meta
 mean = np.array(meta["standardize_mean"], dtype=np.float32)
@@ -212,6 +220,32 @@ print(np.array(cm_norm))
 
 # Per-class precision/recall/F1 as a CSV for quick viewing
 _report = metrics["report"]
+
+# Create a CSV with product ID, binary flag, and failure type for flagged rows
+csv_rows = []
+for i in range(len(preds)):
+    c = int(preds[i])
+    if c == 0:
+        continue  # only predicted failures (classes 1..5)
+    te_row = int(idx_te[i])  # original CSV row index
+    prod_val = None
+    if prod_col is not None:
+        prod_val = str(df.iloc[te_row][prod_col])
+    csv_rows.append({
+        "csv_row": te_row,
+        "product_id": prod_val,
+        "predicted_binary": 1,
+        "predicted_class": CLASS_NAMES[c],          # e.g., TWF/HDF/...
+        "predicted_class_prob": float(probs[i, c]), # confidence for that class
+        "pred_any_failure_prob": float(p_any_fail[i]),
+    })
+
+if csv_rows and FAILURES_CSV:
+    out_dir = os.path.dirname(FAILURES_CSV) or "."
+    os.makedirs(out_dir, exist_ok=True)
+    pd.DataFrame(csv_rows).to_csv(FAILURES_CSV, index=False)
+    print(f"Saved flagged failures CSV to: {FAILURES_CSV}")
+
 # classification_report(output_dict=True) has a dict-of-dicts; flatten into DataFrame
 try:
     import pandas as _pd

@@ -11,10 +11,14 @@ import torch
 import torch.nn as nn             
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
+from pathlib import Path
 
 ### Starting Variables
 ## Variables for the data
-CSV_PATH = "src.data.ai4i2020.csv"         # Expect the UCI CSV to be in the same folder, will need to adjust when we restructure the folders.
+CSV_PATH = Path(__file__).resolve().parent / "ai4i2020.csv"
+if not CSV_PATH.exists():
+    raise FileNotFoundError(f"Expected CSV at {CSV_PATH}")
+#CSV_PATH = "src.data.ai4i2020.csv"         # Expect the UCI CSV to be in the same folder, will need to adjust when we restructure the folders.
 NUM_COLS = [                      # 5 numeric features
     "Air temperature [K]",
     "Process temperature [K]",

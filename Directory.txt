@@ -1,7 +1,7 @@
 -> SRC
 --> data
 ---> __init__.py
----> ai482020.csv
+---> ai4i2020.csv
 ---> data_loader.py
 ---> preprocess.py
 --> models
