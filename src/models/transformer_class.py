@@ -33,7 +33,7 @@ N_CLASSES    = len(CLASS_NAMES)
 BATCH = 256                       # Mini-batch size for training/eval
 EPOCHS = 10                       # Number of passes over the training data
 LR = 1e-3                         # Adam learning rate
-D_MODEL = 64                      # Token embedding size (hidden size)
+D_MODEL = 64                      # Hidden layer size (number of nodes)
 NHEAD = 2                         # Number of attention heads (must divide D_MODEL)
 # Processing managagement
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if present, else CPU
