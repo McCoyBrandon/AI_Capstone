@@ -1,0 +1,25 @@
+name: Edge Inference Multiarch
+on: [push, pull_request]
+
+jobs:
+  build-and-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build multi-arch image (no push)
+        run: |
+          docker buildx create --use || true
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -t edge-infer:test \
+            -f Dockerfile \
+            --load .
+
+      # Run a very quick smoke test under ARM64 emulation
+      - name: Smoke test (ARM64)
+        run: |
+          docker run --rm --platform linux/arm64 edge-infer:test python infer.py

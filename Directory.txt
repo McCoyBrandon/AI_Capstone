@@ -4,6 +4,12 @@
 ---> ai4i2020.csv
 ---> data_loader.py
 ---> preprocess.py
+--> Demo
+---> Huggingface
+----> app.py
+----> README.md
+----> requirement.txt
+---> demo.py
 --> models
 ---> __init__.py
 ---> transformer_class.py
@@ -11,6 +17,7 @@
 ---> __init__.py
 ---> eval.py
 ---> train.py
+---> grid_search_train.py
 --> utils
 ---> __init__.py
 -> tests
@@ -18,6 +25,6 @@
 ---> eval_pretrained_metrics.json
 ---> metrics.json
 ---> model.ckpt
-demo.py
+infer.py
 directory.txt
 README.md

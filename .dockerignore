@@ -1,0 +1,26 @@
+# Bytecode / caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.swp
+.DS_Store
+.venv/
+.env/
+
+# Local runs & artifacts
+runs/
+outputs/
+.cache/
+wandb/
+tensorboard/
+.prof/
+
+# Big data files not needed in image (tweak as needed)
+data/*.csv
+tests/**/*.json
+tests/**/model.ckpt
+
+# Ignore the HuggingFace Demo folder
+Demo/
