@@ -28,3 +28,4 @@
 infer.py
 directory.txt
 README.md
+dockerfile

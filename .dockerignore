@@ -1,13 +1,16 @@
-# Bytecode / caches
+# Ignore these when building Docker images
+runs/
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.pt
+*.ckpt
+*.csv
+*.json
 *.log
-*.swp
+*.ipynb
 .DS_Store
-.venv/
-.env/
+.env
+.git
+.gitignore
 
 # Local runs & artifacts
 runs/
