@@ -1,13 +1,54 @@
 """
-Run a pretrained TinyTabTransformer on the test data, print metrics,
-and list test-set machines predicted to FAIL (with failure type).
+Inference script for a pretrained TinyTabTransformer on AI4I-style datasets.
 
-Terminal use instructions:
-  python -m src.training.demo \
-    --ckpt runs/ai4i_run_1/model.ckpt \
-    --csv  src/data/ai4i2020.csv \
-    --out  runs/ai4i_run_1/demo_metrics.json \
-    --failures-out runs/ai4i_run_1/flagged_failures.json
+This module loads a trained model checkpoint and performs inference on the 
+provided CSV dataset using the same preprocessing pipeline as training. It 
+outputs evaluation metrics, prints model performance summaries, and saves a 
+CSV of all test samples predicted to experience a machine failure (with 
+associated probabilities and failure types).
+
+CSV input is dynamic and the path is provided at runtime via CLI.
+
+Main Function:
+    (executed when run directly)
+    - Loads pretrained checkpoint (weights + meta)
+    - Rebuilds model using stored architecture and normalization stats
+    - Preprocesses the provided CSV file using shared functions from
+      `src.data.preprocess`
+    - Evaluates predictions and computes metrics via
+      `src.utils.metrics`
+    - Exports:
+        * Metrics JSON
+        * Flagged failures CSV listing predicted failed units
+
+Core Components:
+    Model:
+        TinyTabTransformer (imported from src.models.transformer_class)
+    Data:
+        read_ai4i_csv(), build_targets(), encode_features() from src.data.preprocess
+    Metrics:
+        compute_core_metrics(), compute_auroc_metrics() from src.utils.metrics
+    Outputs:
+        - JSON metrics summary
+        - CSV of predicted failures (row index, predicted class, confidence)
+
+Optional Features:
+    - `--product-col` argument allows specifying a column (e.g., "Product ID")
+      to include in the flagged-failures CSV for traceability.
+    - Computes binary calibration metric (Brier Score) for P(any failure).
+
+Outputs:
+    - Metrics JSON:     (--out) e.g., runs/<RUN_NAME>/demo_metrics.json
+    - Failures CSV:     (--failures-out) e.g., runs/<RUN_NAME>/flagged_failures.csv
+    - Console Summary:  Accuracy, F1, Balanced Accuracy, AUROC per class
+
+Terminal usage example:
+    python -m src.training.infer \
+        --ckpt runs/ai4i_run_1/model.ckpt \
+        --csv  src/data/ai4i2020.csv \
+        --out  runs/ai4i_run_1/infer_metrics.json \
+        --failures-out runs/ai4i_run_1/flagged_failures.csv \
+        [--product-col "Product ID"]
 """
 
 # Required Packages (same style as your files)
@@ -24,6 +65,8 @@ from sklearn.metrics import (
 
 # Additional Reference code 
 from src.models.transformer_class import TinyTabTransformer   # model class
+from src.data.preprocess import read_ai4i_csv, build_targets, encode_features, standardize_train_test
+from src.utils.metrics import compute_core_metrics, compute_auroc_metrics
 
 # Setting up Terminal instructions when using --help
 parser = argparse.ArgumentParser(description="Demo: evaluate a pretrained model and list predicted failures.")
@@ -31,6 +74,8 @@ parser.add_argument("--ckpt", type=str, default="runs/ai4i_run_1/model.ckpt",
                     help="Path to checkpoint saved by train.py (weights + meta)")
 parser.add_argument("--csv", type=str, default="src/data/ai4i2020.csv",
                     help="Path to AI4I 2020 CSV (same file used in training)")
+parser.add_argument("--product-col", type=str, default=None,
+                    help="Column to use as product identifier in failures CSV (e.g., 'Product ID').")
 parser.add_argument("--out", type=str, default="runs/ai4i_run_1/demo_metrics.json",
                     help="Where to save evaluation metrics JSON")
 parser.add_argument("--failures-out", type=str, default="runs/ai4i_run_1/flagged_failures.json",
@@ -69,31 +114,10 @@ NHEAD       = int(meta["nhead"])
 N_CLASSES   = len(CLASS_NAMES)
 
 
-## Load CSV and rebuild labels exactly like data_loader.py
-##!! REVIEW CREATING FUNCTIONS WITHIN DATA_LOADER.PY TO CALL TO REMOVE DUPLICATE !!##
-df = pd.read_csv(CSV_PATH)
-# column check 
-required_cols = set(NUM_COLS + [CAT_COL, TARGET] + FAILURE_COLS)
-missing = list(required_cols - set(df.columns))
-if missing:
-    raise ValueError(f"Missing expected columns in CSV: {missing}")
-
-# Extract features
-X_num   = df[NUM_COLS].values.astype(np.float32)
-cat_idx = df[CAT_COL].astype("category").cat.codes.values.astype(np.int64)
-# Build multiclass target exactly as in data_loader.py
-# 0 = NoFailure; 1..5 = TWF/HDF/PWF/OSF/RNF
-fails   = df[FAILURE_COLS].values.astype(np.int64)  # [N,5]
-y_bin   = df[TARGET].values.astype(np.int64)
-y_cls   = np.zeros(len(df), dtype=np.int64)
-mask_fail = (y_bin == 1)
-if mask_fail.any():
-    priority = np.array([0,1,2,3,4], dtype=np.int64)   # TWF > HDF > PWF > OSF > RNF
-    sub = fails[mask_fail]
-    chosen = np.argmax(sub[:, priority] == 1, axis=1)
-    none_set = (sub.sum(axis=1) == 0)
-    chosen[none_set] = 0
-    y_cls[mask_fail] = chosen + 1
+# Read + validate schema, then build targets/features using shared helpers
+df = read_ai4i_csv(CSV_PATH, validate_schema=True)
+y_bin, y_cls      = build_targets(df)
+X_num, cat_idx, _ = encode_features(df)
 
 # Keep original row indices so we can map back to product key from source data
 row_idx = np.arange(len(df))
@@ -139,76 +163,42 @@ all_logits = torch.cat(all_logits, dim=0).numpy()      # [Nte, C]
 probs      = torch.softmax(torch.tensor(all_logits), dim=1).numpy()
 preds      = probs.argmax(axis=1)
 
+# Compute binary "any failure" probability and label
+# Locate which index represents "NoFailure"
+try:
+    nofail_idx = CLASS_NAMES.index("NoFailure")
+except ValueError:
+    nofail_idx = 0  # fallback if label set differs
 
-# Metrics (same look/feel as eval.py)
-##!! REVIEW CREATING FUNCTIONS WITHIN METRICS.PY TO CALL TO REMOVE DUPLICATE !!##
-metrics = {
-    "accuracy":          float(accuracy_score(y_te, preds)),
-    "balanced_accuracy": float(balanced_accuracy_score(y_te, preds)),
-    "macro_f1":          float(f1_score(y_te, preds, average="macro", zero_division=0)),
-    "weighted_f1":       float(f1_score(y_te, preds, average="weighted", zero_division=0)),
-    "support_per_class": dict(zip(CLASS_NAMES, [int(x) for x in np.bincount(y_te, minlength=N_CLASSES)])),
-    "report":            classification_report(
-                              y_te, preds,
-                              labels=list(range(N_CLASSES)),
-                              target_names=CLASS_NAMES,
-                              zero_division=0,
-                              output_dict=True,
-                          ),
-    "confusion_matrix":  confusion_matrix(y_te, preds, labels=list(range(N_CLASSES))).tolist(),
-}
+# Probability that a unit experiences *any* failure
+p_any_fail  = 1.0 - probs[:, nofail_idx]        # P(any failure) = 1 - P(NoFailure)
+# Binary truth labels: 1 = any failure, 0 = no failure
+y_binary_te = (y_te != nofail_idx).astype(int)
 
-print(f"Test accuracy: {metrics['accuracy']:.4f}")
-print(f"Macro F1: {metrics['macro_f1']:.4f} | Weighted F1: {metrics['weighted_f1']:.4f}")
-print(f"Balanced accuracy: {metrics['balanced_accuracy']:.4f}")
+# Shareable metrics (JSON)
+core = compute_core_metrics(y_te, preds, CLASS_NAMES)
+aucs = compute_auroc_metrics(y_te, probs, CLASS_NAMES)
+
+print(f"Test accuracy: {core['accuracy']:.4f}")
+print(f"Macro F1: {core['macro_f1']:.4f} | Weighted F1: {core['weighted_f1']:.4f}")
+print(f"Balanced accuracy: {core['balanced_accuracy']:.4f}")
+
+from sklearn.metrics import classification_report as _cr
 print("\nClassification report:")
-print(classification_report(y_te, preds, labels=list(range(N_CLASSES)), target_names=CLASS_NAMES, zero_division=0))
+print(_cr(y_te, preds, labels=list(range(N_CLASSES)), target_names=CLASS_NAMES, zero_division=0))
+
+import numpy as _np
 print("Confusion matrix (rows=true, cols=pred):")
-print(confusion_matrix(y_te, preds, labels=list(range(N_CLASSES))))
+print(_np.array(core["confusion_matrix"]))
 
-# AUROC diagnostics
-Y_true_ovr = np.zeros((y_te.shape[0], N_CLASSES), dtype=np.int64)
-Y_true_ovr[np.arange(y_te.shape[0]), y_te] = 1
-
-per_class_auc = {}
 print("\nPer-class AUROC:")
-for i, name in enumerate(CLASS_NAMES):
-    try:
-        auc_i = roc_auc_score(Y_true_ovr[:, i], probs[:, i])
-        per_class_auc[name] = float(auc_i)
-        print(f"{name:>12s}: {auc_i:.4f}")
-    except ValueError:
-        per_class_auc[name] = None
-        print(f"{name:>12s}: N/A (absent or degenerate in test)")
+for k, v in aucs["per_class_auc"].items():
+    print(f"{k:>12s}: {'N/A' if v is None else f'{v:.4f}'}")
+for k in ("macro_auc", "micro_auc", "weighted_auc", "binary_auc"):
+    val = aucs[k]
+    print(f"{k}: {'N/A' if val is None else f'{val:.4f}'}")
 
-try:
-    macro_auc    = float(roc_auc_score(Y_true_ovr, probs, multi_class="ovr", average="macro"))
-    micro_auc    = float(roc_auc_score(Y_true_ovr, probs, multi_class="ovr", average="micro"))
-    weighted_auc = float(roc_auc_score(Y_true_ovr, probs, multi_class="ovr", average="weighted"))
-    print(f"\nMacro AUROC:    {macro_auc:.4f}")
-    print(f"Micro AUROC:    {micro_auc:.4f}")
-    print(f"Weighted AUROC: {weighted_auc:.4f}")
-except ValueError:
-    macro_auc = micro_auc = weighted_auc = None
-    print("\nMacro/Micro/Weighted AUROC unavailable (degenerate labels).")
-
-# Binary AUROC (NoFailure vs any failure)
-p_any_fail  = probs[:, 1:].sum(axis=1)
-y_binary_te = (y_te != 0).astype(int)
-try:
-    bin_auc = float(roc_auc_score(y_binary_te, p_any_fail))
-    print(f"\nBinary AUROC (TARGET='{TARGET}'): {bin_auc:.4f}")
-except ValueError:
-    bin_auc = None
-    print(f"\nBinary AUROC (TARGET='{TARGET}') unavailable.")
-
-metrics.update({
-    "per_class_auc": per_class_auc,
-    "macro_auc": macro_auc,
-    "micro_auc": micro_auc,
-    "weighted_auc": weighted_auc,
-    "binary_auc": bin_auc,
-})
+metrics = {**core, **aucs}  # single payload to save
 
 # Normalized confusion matrix
 cm = confusion_matrix(y_te, preds, labels=list(range(N_CLASSES)))
@@ -222,6 +212,9 @@ print(np.array(cm_norm))
 _report = metrics["report"]
 
 # Create a CSV with product ID, binary flag, and failure type for flagged rows
+# Pick a product identifier column if present, used for more reboust ProductID callback for inference outputs.
+prod_col = args.product_col or next((c for c in ["Product ID", "ProductID", "product_id", "productId"]
+                                     if c in df.columns), None)
 csv_rows = []
 for i in range(len(preds)):
     c = int(preds[i])
