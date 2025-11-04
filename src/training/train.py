@@ -1,7 +1,46 @@
 """
-TabTransformer-style classifier for the AI4I 2020 dataset.
-Reference: 
+Training script for the TinyTabTransformer model using AI4I-style datasets.
 
+This module handles model initialization, optimization, and performance logging 
+via TensorBoard. It supports multi-class classification with class-weighted loss 
+to address class imbalance, and produces checkpointed model weights and metrics 
+for evaluation and reproducibility.
+
+CSV input is **not hardcoded** — the data is dynamically loaded and preprocessed 
+through the `prepare_datasets()` function from `src.data.preprocess`.
+
+Main Function:
+    (executed when run directly)
+    Trains the TinyTabTransformer model end-to-end using:
+        - Data from prepare_datasets(csv_path)
+        - Model definition from src.models.transformer_class
+        - Training hyperparameters defined within this script
+
+Core Components:
+    Model:
+        TinyTabTransformer (imported from src.models.transformer_class)
+    Data:
+        prepare_datasets() from src.data.preprocess
+    Logging:
+        TensorBoard SummaryWriter (logs under runs/<RUN_NAME>)
+    Checkpointing:
+        model.ckpt and metrics.json saved under runs/<RUN_NAME>
+
+Outputs:
+    - Trained model checkpoint: runs/<RUN_NAME>/model.ckpt
+    - Metrics file:             runs/<RUN_NAME>/metrics.json
+    - TensorBoard logs:         runs/<RUN_NAME>/tb/
+
+Key Functions and Sections:
+    - prepare_datasets(csv_path): Loads and preprocesses data
+    - TinyTabTransformer(...): Builds model architecture
+    - Training Loop: Runs for specified epochs, logs losses and metrics
+    - Evaluation Block: Computes accuracy, F1, balanced accuracy, AUROC, etc.
+    - TensorBoard Logging: Tracks loss, metrics, and confusion matrix
+
+Debugging test:
+    Terminal:
+        python -m src.training.train
 """
 
 # Required Packages
@@ -19,28 +58,21 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 import itertools
 
-
-# Additional Reference code
+## Additional Reference code
 from src.models.transformer_class import TinyTabTransformer                   # model class
-from src.data.data_loader import (                                            # prepared data & metadata
-    tr_dl, te_dl, class_weights, class_counts, type_vocab,
-    mean, std, NUM_COLS, CLASS_NAMES, N_CLASSES, DEVICE, D_MODEL, NHEAD, TARGET
-)
+## Data Processing
+from src.data.preprocess import prepare_datasets, CLASS_NAMES, N_CLASSES, DEVICE, D_MODEL, NHEAD, NUM_COLS, TARGET
 
-### Starting Variables
-## Variables for the data
-NUM_COLS = [                      # 5 numeric features
-    "Air temperature [K]",
-    "Process temperature [K]",
-    "Rotational speed [rpm]",
-    "Torque [Nm]",
-    "Tool wear [min]",
-]
-CAT_COL = "Type"                  # Single categorical feature (values like L/M/H)
-TARGET = "Machine failure"        # Binary target column (0 or 1)
-FAILURE_COLS = ["TWF", "HDF", "PWF", "OSF", "RNF"] # Columns for multi-classifcation
-CLASS_NAMES  = ["NoFailure", "TWF", "HDF", "PWF", "OSF", "RNF"] # Classifiers for multi-classification
-N_CLASSES    = len(CLASS_NAMES)
+CSV_PATH = "src/data/ai4i2020.csv"   # or any CSV with the same headers
+data = prepare_datasets(csv_path=CSV_PATH, batch=256, test_size=0.20, random_state=42)
+
+tr_dl         = data["tr_dl"]
+te_dl         = data["te_dl"]
+class_weights = data["class_weights"]
+class_counts  = data["class_counts"]
+type_vocab    = data["type_vocab"]
+mean          = data["mean"]
+std           = data["std"]
 
 # Hyperparameters for the model
 BATCH = 256                       # Mini-batch size for training/eval

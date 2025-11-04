@@ -1,6 +1,8 @@
 """
 Run a pretrained TinyTabTransformer on the test split and report metrics.
-Reuses code style from train.py and data_loader.py.
+
+# Main function
+
 """
 
 # Required Packages (same style as your files)
@@ -15,10 +17,20 @@ import os, json, argparse
 
 # Additional Reference code
 from src.models.transformer_class import TinyTabTransformer                   # model class
-from src.data.data_loader import (                                            # prepared data & metadata
-    tr_dl, te_dl, class_weights, class_counts, type_vocab,
-    mean, std, NUM_COLS, CLASS_NAMES, N_CLASSES, DEVICE, D_MODEL, NHEAD, TARGET
-)
+from src.data.preprocess import prepare_datasets, CLASS_NAMES, N_CLASSES, DEVICE
+
+# Data Processing
+CSV_PATH = "src/data/ai4i2020.csv"   # same headers
+data = prepare_datasets(csv_path=CSV_PATH, batch=256, test_size=0.20, random_state=42)
+
+te_dl       = data["te_dl"]
+type_vocab  = data["type_vocab"]
+NUM_COLS    = data["NUM_COLS"]
+CLASS_NAMES = data["CLASS_NAMES"]
+N_CLASSES   = data["N_CLASSES"]
+D_MODEL     = data["D_MODEL"]
+NHEAD       = data["NHEAD"]
+TARGET      = data["TARGET"]
 
 ### Starting Variables
 parser = argparse.ArgumentParser(description="Evaluate a pretrained model on the test set.")

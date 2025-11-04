@@ -1,13 +1,50 @@
 """
-train2.py — Hyperparameter tuning with TensorBoard integration
+Hyperparameter tuning script for the TinyTabTransformer model using AI4I-style datasets.
 
-Terminal Runs in Root Directory:
-Run the code:
-python -m src.training.train2
+This module automates training runs with different combinations of hyperparameters 
+(For example, learning rate, model dimension, attention heads) and evaluates each configuration 
+to identify the optimal setup based on performance metrics such as Macro F1.
+
+CSV input is dynamically loaded through the `prepare_datasets()` function from `src.data.preprocess`.
+
+Main Function:
+    main()
+        - Defines a hyperparameter grid for tuning (e.g., D_MODEL, NHEAD, LR)
+        - Iterates over all combinations
+        - Trains and evaluates TinyTabTransformer models for each configuration
+        - Logs metrics and performance data to TensorBoard
+        - Saves model checkpoints and metrics for each run
+        - Reports the best run based on macro F1 score
+
+Core Components:
+    Model:
+        TinyTabTransformer (imported from src.models.transformer_class)
+    Data:
+        prepare_datasets() from src.data.preprocess
+    Logging:
+        TensorBoard SummaryWriter (one log per hyperparameter run)
+    Checkpointing:
+        model.ckpt and metrics.json saved under runs/<RUNS_NAME>/<HP_COMBO>/
+
+Key Functions and Sections:
+    - train_one_run(hp, run_name): 
+          Trains and evaluates the model for a single hyperparameter combination
+    - _product_dict(grid): 
+          Generates all combinations of hyperparameters from the defined grid
+    - main(): 
+          Drives the full tuning experiment and reports the best-performing configuration
+
+Performance Logging:
+    - Tracks training loss, throughput, and step/epoch times
+    - Logs evaluation metrics: accuracy, balanced accuracy, macro/weighted F1, and AUROC
+    - Adds confusion matrices and hyperparameter summaries to TensorBoard
+
+Terminal Run:
+    python -m src.training.grid_search_train
 
 View the results:
-python -m tensorboard.main --logdir runs/<YOUR RUNS_NAME> --port 6006
-python -m tensorboard.main --logdir runs/oct15_run_bm --port 6006
+    python -m tensorboard.main --logdir runs/<YOUR RUNS_NAME> --port 6006
+    python -m tensorboard.main --logdir runs/oct15_run_bm --port 6006
 """
 
 # Required Packages
@@ -28,16 +65,30 @@ try:
 except Exception:
     psutil = None
 
-
 # Additional Reference code
 from src.models.transformer_class import TinyTabTransformer                   # model class
-from src.data.data_loader import (                                            # prepared data & metadata
-    tr_dl, te_dl, class_weights, class_counts, type_vocab,
-    mean, std, NUM_COLS, CLASS_NAMES, N_CLASSES, DEVICE, D_MODEL, NHEAD, TARGET
-)
+from src.data.preprocess import prepare_datasets, CLASS_NAMES, N_CLASSES, DEVICE
+
+# Data Processing
+CSV_PATH = "src/data/ai4i2020.csv"
+data = prepare_datasets(csv_path=CSV_PATH, batch=256, test_size=0.20, random_state=42)
+
+tr_dl         = data["tr_dl"]
+te_dl         = data["te_dl"]
+class_weights = data["class_weights"]
+class_counts  = data["class_counts"]
+type_vocab    = data["type_vocab"]
+
+# Additional subsections
+NUM_COLS    = data["NUM_COLS"]
+D_MODEL     = data["D_MODEL"]
+NHEAD       = data["NHEAD"]
+TARGET      = data["TARGET"]
+CLASS_NAMES = data["CLASS_NAMES"]
+N_CLASSES   = data["N_CLASSES"]
 
 # Where to save everything 
-RUNS_NAME = "oct15_run_bm"                 # e.g., "oct15_run_bm"
+RUNS_NAME = "nov3_run_bm"                 # e.g., "oct15_run_bm"
 RUNS_ROOT = os.path.join("runs", RUNS_NAME)
 
 # Default hyperparameters
@@ -282,7 +333,6 @@ def train_one_run(hp, run_name):
 
 
 # Hyperparameter Driver
-
 def _product_dict(grid):
     keys = list(grid.keys())
     for values in _prod(*[grid[k] for k in keys]):
