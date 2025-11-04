@@ -68,6 +68,8 @@ except Exception:
 # Additional Reference code
 from src.models.transformer_class import TinyTabTransformer                   # model class
 from src.data.preprocess import prepare_datasets, CLASS_NAMES, N_CLASSES, DEVICE
+from src.utils.metrics import compute_core_metrics, compute_auroc_metrics, confusion_matrix_figure
+
 
 # Data Processing
 CSV_PATH = "src/data/ai4i2020.csv"
@@ -98,59 +100,6 @@ D_MODEL = 64
 NHEAD   = 2
 
 ## Functions to assist with the hypertuning tracking
-
-def _plot_confusion_matrix(cm_arr, class_names):
-    fig = Figure(figsize=(6, 6))
-    ax = fig.subplots()
-    im = ax.imshow(cm_arr, interpolation='nearest')
-    ax.figure.colorbar(im, ax=ax)
-    ax.set(
-        xticks=range(len(class_names)), yticks=range(len(class_names)),
-        xticklabels=class_names, yticklabels=class_names,
-        ylabel='True label', xlabel='Predicted label', title='Confusion Matrix'
-    )
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
-    thresh = cm_arr.max() / 2.0
-    for i in range(cm_arr.shape[0]):
-        for j in range(cm_arr.shape[1]):
-            ax.text(j, i, format(cm_arr[i, j], 'd'),
-                    ha="center", va="center",
-                    color="white" if cm_arr[i, j] > thresh else "black")
-    fig.tight_layout()
-    return fig
-
-
-def _auroc_block(probs, all_y):
-    probs_np  = np.asarray(probs)
-    y_true_np = np.asarray(all_y)
-
-    per_class_auc = {}
-    for i, name in enumerate(CLASS_NAMES):
-        y_i = (y_true_np == i).astype(int)
-        if y_i.min() == y_i.max():
-            per_class_auc[name] = None
-        else:
-            try:
-                per_class_auc[name] = roc_auc_score(y_i, probs_np[:, i])
-            except Exception:
-                per_class_auc[name] = None
-
-    try:
-        nofail_idx = CLASS_NAMES.index("NoFailure")
-    except ValueError:
-        nofail_idx = 0
-    y_bin = (y_true_np != nofail_idx).astype(int)
-    p_bin = 1.0 - probs_np[:, nofail_idx]  # prob of any failure
-    if y_bin.min() == y_bin.max():
-        bin_auc = None
-    else:
-        try:
-            bin_auc = roc_auc_score(y_bin, p_bin)
-        except Exception:
-            bin_auc = None
-
-    return per_class_auc, bin_auc
-
 def train_one_run(hp, run_name):
     """
     Train/evaluate a single run with hyperparameters:
@@ -256,7 +205,7 @@ def train_one_run(hp, run_name):
         writer.add_scalar("loss/epoch", total / count, epoch)
         print(f"Epoch {epoch}/{EPOCHS_} - train loss: {total / count:.4f}")
 
-    # Evaluattion Procedure
+    # Evaluattion Procedure and saving metrics with checkpoints
     model.eval()
     all_logits, all_y = [], []
     with torch.no_grad():
@@ -267,68 +216,72 @@ def train_one_run(hp, run_name):
             all_y.append(yb.cpu())
 
     all_logits = torch.cat(all_logits, dim=0).numpy()
-    all_y = torch.cat(all_y, dim=0).numpy()
-    probs = torch.softmax(torch.tensor(all_logits), dim=1).numpy()
-    preds = probs.argmax(axis=1)
+    all_y      = torch.cat(all_y,      dim=0).numpy()
+    probs      = torch.softmax(torch.tensor(all_logits), dim=1).numpy()
+    preds      = probs.argmax(axis=1)
 
-    acc  = accuracy_score(all_y, preds)
-    bacc = balanced_accuracy_score(all_y, preds)
-    macro_f1 = f1_score(all_y, preds, average="macro", zero_division=0)
-    weighted_f1 = f1_score(all_y, preds, average="weighted", zero_division=0)
+    # Shared metrics
+    core = compute_core_metrics(all_y, preds, CLASS_NAMES)
+    aucs = compute_auroc_metrics(all_y, probs, CLASS_NAMES)
 
-    print(f"Test accuracy: {acc:.4f}")
-    print(f"Macro F1: {macro_f1:.4f} | Weighted F1: {weighted_f1:.4f}")
-    print(f"Balanced accuracy: {bacc:.4f}")
+    # Console summary
+    print(f"Test accuracy: {core['accuracy']:.4f}")
+    print(f"Macro F1: {core['macro_f1']:.4f} | Weighted F1: {core['weighted_f1']:.4f}")
+    print(f"Balanced accuracy: {core['balanced_accuracy']:.4f}")
     print("\nClassification report:")
-    print(classification_report(all_y, preds, labels=list(range(N_CLASSES)),
-                                target_names=CLASS_NAMES, zero_division=0))
-    cm = confusion_matrix(all_y, preds, labels=list(range(N_CLASSES)))
+    from sklearn.metrics import classification_report as _cr
+    print(_cr(all_y, preds, labels=list(range(N_CLASSES)), target_names=CLASS_NAMES, zero_division=0))
+    import numpy as _np
     print("Confusion matrix (rows=true, cols=pred):")
-    print(cm)
+    print(_np.array(core["confusion_matrix"]))
 
-    # AUROC
-    per_class_auc, bin_auc = _auroc_block(probs, all_y)
+    print("\nPer-class AUROC:")
+    for k, v in aucs["per_class_auc"].items():
+        print(f"{k:>12s}: {'N/A' if v is None else f'{v:.4f}'}")
+    for k in ("macro_auc", "micro_auc", "weighted_auc", "binary_auc"):
+        val = aucs[k]
+        print(f"{k}: {'N/A' if val is None else f'{val:.4f}'}")
 
-    # Log TB scalars/figures/hparams
-    epoch_tag = EPOCHS_  # tag final metrics with the last epoch index
-    writer.add_scalar("eval/accuracy", acc, epoch_tag)
-    writer.add_scalar("eval/balanced_accuracy", bacc, epoch_tag)
-    writer.add_scalar("eval/macro_f1", macro_f1, epoch_tag)
-    writer.add_scalar("eval/weighted_f1", weighted_f1, epoch_tag)
+    # TensorBoard: scalars/fig/params
+    epoch_tag = EPOCHS_
+    writer.add_scalar("eval/accuracy",          core["accuracy"], epoch_tag)
+    writer.add_scalar("eval/balanced_accuracy", core["balanced_accuracy"], epoch_tag)
+    writer.add_scalar("eval/macro_f1",          core["macro_f1"], epoch_tag)
+    writer.add_scalar("eval/weighted_f1",       core["weighted_f1"], epoch_tag)
 
-    for name, auc_v in per_class_auc.items():
+    for cname, auc_v in aucs["per_class_auc"].items():
         if auc_v is not None:
-            writer.add_scalar(f"eval/auroc/{name}", auc_v, epoch_tag)
-    if bin_auc is not None:
-        writer.add_scalar("eval/binary_auroc_any_failure", bin_auc, epoch_tag)
+            writer.add_scalar(f"eval/auroc/{cname}", auc_v, epoch_tag)
+    for k in ("macro_auc", "micro_auc", "weighted_auc", "binary_auc"):
+        if aucs[k] is not None:
+            writer.add_scalar(f"eval/{k}", aucs[k], epoch_tag)
 
-    writer.add_figure("eval/confusion_matrix", _plot_confusion_matrix(cm, CLASS_NAMES), epoch_tag)
+    cm_fig = confusion_matrix_figure(_np.array(core["confusion_matrix"]), CLASS_NAMES)
+    writer.add_figure("eval/confusion_matrix", cm_fig, epoch_tag)
 
     hparam_dict = {
         "lr": LR_, "batch_size": getattr(tr_dl, 'batch_size', None) or 256,
         "d_model": D_MODEL_, "nhead": NHEAD_, "epochs": EPOCHS_,
     }
     metric_dict = {
-        "hparam/accuracy": float(acc),
-        "hparam/macro_f1": float(macro_f1),
-        "hparam/weighted_f1": float(weighted_f1),
-        "hparam/balanced_accuracy": float(bacc),
+        "hparam/accuracy":          float(core["accuracy"]),
+        "hparam/macro_f1":          float(core["macro_f1"]),
+        "hparam/weighted_f1":       float(core["weighted_f1"]),
+        "hparam/balanced_accuracy": float(core["balanced_accuracy"]),
     }
     writer.add_hparams(hparam_dict, metric_dict)
 
-    # Save Checkpoints
+    # Save per-run artifacts
     ckpt_dir = os.path.join(RUNS_ROOT, run_name)
     os.makedirs(ckpt_dir, exist_ok=True)
     torch.save({"model_state_dict": model.state_dict()}, os.path.join(ckpt_dir, "model.ckpt"))
+
     with open(os.path.join(ckpt_dir, "metrics.json"), "w", encoding="utf-8") as f:
-        json.dump({
-            "acc": float(acc), "macro_f1": float(macro_f1),
-            "weighted_f1": float(weighted_f1), "bacc": float(bacc),
-            "per_class_auc": {k: (None if v is None else float(v)) for k, v in per_class_auc.items()},
-            "bin_auc": (None if bin_auc is None else float(bin_auc)),
-        }, f, indent=2)
+        json.dump({**core, **aucs}, f, indent=2)
 
     writer.close()
+    return core["accuracy"], core["macro_f1"], core["weighted_f1"], core["balanced_accuracy"]
+
     return acc, macro_f1, weighted_f1, bacc
 
 

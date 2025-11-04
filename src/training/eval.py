@@ -1,9 +1,37 @@
 """
-Run a pretrained TinyTabTransformer on the test split and report metrics.
+Evaluation script for a pretrained TinyTabTransformer on AI4I-style datasets.
 
-# Main function
+This module loads a saved checkpoint, rebuilds the model from its metadata,
+and evaluates on the test split produced by `prepare_datasets()` in
+`src.data.preprocess`. It reports core metrics (accuracy, balanced accuracy,
+macro/weighted F1), AUROC variants (per-class, macro/micro/weighted, and
+binary "any failure" vs "no failure"), and writes a JSON with results.
 
+CSV input is dynamically loaded via `prepare_datasets()`.
+
+Main Function:
+    (executed when run directly)
+    - Loads checkpoint (weights + meta), rebuilds the model
+    - Runs evaluation on test dataloader
+    - Prints a readable summary and saves metrics to JSON
+
+Core Components:
+    Model:
+        TinyTabTransformer from src.models.transformer_class
+    Data:
+        Prepare_datasets() from src.data.preprocess
+    Metrics:
+        Shared metric and plotting helpers from src.utils.metrics
+
+Outputs:
+    - Metrics JSON: runs/<RUN_NAME>/eval_pretrained_metrics.json
+    - Console summary: accuracy / F1 / AUROC / confusion matrix
+
+Terminal run:
+    python -m src.training.eval --ckpt runs/ai4i_run_1/model.ckpt \
+                                --out  runs/ai4i_run_1/eval_pretrained_metrics.json
 """
+
 
 # Required Packages (same style as your files)
 import numpy as np
@@ -18,6 +46,7 @@ import os, json, argparse
 # Additional Reference code
 from src.models.transformer_class import TinyTabTransformer                   # model class
 from src.data.preprocess import prepare_datasets, CLASS_NAMES, N_CLASSES, DEVICE
+from src.utils.metrics import compute_core_metrics, compute_auroc_metrics, confusion_matrix_figure
 
 # Data Processing
 CSV_PATH = "src/data/ai4i2020.csv"   # same headers
@@ -82,78 +111,35 @@ all_logits = torch.cat(all_logits, dim=0).numpy()  # [Nte, C]
 all_y      = torch.cat(all_y, dim=0).numpy()       # [Nte]
 probs      = torch.softmax(torch.tensor(all_logits), dim=1).numpy()
 preds      = probs.argmax(axis=1)
+core = compute_core_metrics(all_y, preds, class_names)
+aucs = compute_auroc_metrics(all_y, probs, class_names)
 
-# Core metrics (JSON-friendly)
-metrics = {
-    "accuracy":          float(accuracy_score(all_y, preds)),
-    "balanced_accuracy": float(balanced_accuracy_score(all_y, preds)),
-    "macro_f1":          float(f1_score(all_y, preds, average="macro", zero_division=0)),
-    "weighted_f1":       float(f1_score(all_y, preds, average="weighted", zero_division=0)),
-    "support_per_class": dict(zip(class_names, [int(x) for x in np.bincount(all_y, minlength=n_classes)])),
-    "report":            classification_report(
-                            all_y, preds,
-                            labels=list(range(n_classes)),
-                            target_names=class_names,
-                            zero_division=0,
-                            output_dict=True
-                        ),
-    "confusion_matrix":  confusion_matrix(all_y, preds, labels=list(range(n_classes))).tolist(),
-}
-
-# Terminal prints (same look/feel as train.py)
-print(f"Test accuracy: {metrics['accuracy']:.4f}")
-print(f"Macro F1: {metrics['macro_f1']:.4f} | Weighted F1: {metrics['weighted_f1']:.4f}")
-print(f"Balanced accuracy: {metrics['balanced_accuracy']:.4f}")
+print(f"Test accuracy: {core['accuracy']:.4f}")
+print(f"Macro F1: {core['macro_f1']:.4f} | Weighted F1: {core['weighted_f1']:.4f}")
+print(f"Balanced accuracy: {core['balanced_accuracy']:.4f}")
 print("\nClassification report:")
-print(classification_report(all_y, preds, labels=list(range(n_classes)), target_names=class_names, zero_division=0))
+from sklearn.metrics import classification_report as _cr
+print(_cr(all_y, preds, labels=list(range(n_classes)),
+          target_names=class_names, zero_division=0))
+import numpy as _np
 print("Confusion matrix (rows=true, cols=pred):")
-print(confusion_matrix(all_y, preds, labels=list(range(n_classes))))
-
-# AUROC (warning-safe for degenerate classes)
-Y_true_ovr = np.zeros((all_y.shape[0], n_classes), dtype=np.int64)
-Y_true_ovr[np.arange(all_y.shape[0]), all_y] = 1
+print(_np.array(core["confusion_matrix"]))
 
 print("\nPer-class AUROC:")
-per_class_auc = {}
-for i, name in enumerate(class_names):
-    try:
-        auc_i = roc_auc_score(Y_true_ovr[:, i], probs[:, i])
-        per_class_auc[name] = float(auc_i)
-        print(f"{name:>12s}: {auc_i:.4f}")
-    except ValueError:
-        per_class_auc[name] = None
-        print(f"{name:>12s}: N/A (absent or degenerate in test)")
+for k, v in aucs["per_class_auc"].items():
+    print(f"{k:>12s}: {'N/A' if v is None else f'{v:.4f}'}")
+for k in ("macro_auc", "micro_auc", "weighted_auc", "binary_auc"):
+    val = aucs[k]
+    print(f"{k}: {'N/A' if val is None else f'{val:.4f}'}")
 
-# Macro/micro/weighted AUROC
-try:
-    macro_auc    = float(roc_auc_score(Y_true_ovr, probs, multi_class="ovr", average="macro"))
-    micro_auc    = float(roc_auc_score(Y_true_ovr, probs, multi_class="ovr", average="micro"))
-    weighted_auc = float(roc_auc_score(Y_true_ovr, probs, multi_class="ovr", average="weighted"))
-    print(f"\nMacro AUROC:    {macro_auc:.4f}")
-    print(f"Micro AUROC:    {micro_auc:.4f}")
-    print(f"Weighted AUROC: {weighted_auc:.4f}")
-except ValueError:
-    macro_auc = micro_auc = weighted_auc = None
-    print("\nMacro/Micro/Weighted AUROC unavailable (degenerate labels).")
+# Save JSON
+out_payload = {**core, **aucs}
+os.makedirs(os.path.dirname(OUT_PATH) or ".", exist_ok=True)
+with open(OUT_PATH, "w", encoding="utf-8") as f:
+    json.dump(out_payload, f, indent=2)
+print(f"\nSaved eval metrics to: {OUT_PATH}")
 
-# Binary AUROC (any failure vs. no failure)
-p_any_fail  = probs[:, 1:].sum(axis=1)               # P(failure)
-y_binary_te = (all_y != 0).astype(int)
-try:
-    bin_auc = float(roc_auc_score(y_binary_te, p_any_fail))
-    print(f"\nBinary AUROC (TARGET='{meta['target']}'): {bin_auc:.4f}")
-except ValueError:
-    bin_auc = None
-    print(f"\nBinary AUROC (TARGET='{meta['target']}') unavailable.")
 
-# Save metrics
-metrics.update({
-    "per_class_auc": per_class_auc,
-    "macro_auc": macro_auc,
-    "micro_auc": micro_auc,
-    "weighted_auc": weighted_auc,
-    "binary_auc": bin_auc,
-})
 os.makedirs(os.path.dirname(OUT_PATH) or ".", exist_ok=True)
 with open(OUT_PATH, "w", encoding="utf-8") as f:
     json.dump(metrics, f, indent=2)
