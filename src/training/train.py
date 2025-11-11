@@ -65,7 +65,18 @@ from src.utils.metrics import compute_core_metrics, compute_auroc_metrics, confu
 from src.data.preprocess import prepare_datasets, CLASS_NAMES, N_CLASSES, DEVICE, D_MODEL, NHEAD, NUM_COLS, TARGET
 
 CSV_PATH = "src/data/ai4i2020.csv"   # or any CSV with the same headers
-data = prepare_datasets(csv_path=CSV_PATH, batch=256, test_size=0.20, random_state=42)
+data = prepare_datasets(
+    csv_path=CSV_PATH,
+    batch=256,
+    test_size=0.20,
+    random_state=42,
+    normalize="zscore",   # "zscore" or "minmax"
+    resample="smote",     # SMOTE resampling method
+    smote_k_neighbors=5,
+    smote_random_state=42,
+    smote_sampling="auto" # Auto or use dict like {1:desired_count, ...} if you want custom per-class
+)
+
 
 tr_dl         = data["tr_dl"]
 te_dl         = data["te_dl"]
