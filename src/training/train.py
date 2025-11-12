@@ -57,12 +57,25 @@ from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 import itertools
+import argparse
+
 
 ## Additional Reference code
 from src.models.transformer_class import TinyTabTransformer                   # model class
 from src.utils.metrics import compute_core_metrics, compute_auroc_metrics, confusion_matrix_figure
 ## Data Processing
 from src.data.preprocess import prepare_datasets, CLASS_NAMES, N_CLASSES, DEVICE, D_MODEL, NHEAD, NUM_COLS, TARGET
+
+# Argument parsing for dynamic run naming
+parser = argparse.ArgumentParser(description="Train TinyTabTransformer with optional run name flag.")
+parser.add_argument(
+    "--run_name",
+    type=str,
+    default="Test_run_1",
+    help="Name of the run folder under 'runs/'. Example: --run_name ai4i_run_1"
+)
+args = parser.parse_args()
+RUN_NAME = args.run_name
 
 CSV_PATH = "src/data/ai4i2020.csv"   # or any CSV with the same headers
 data = prepare_datasets(
@@ -78,7 +91,7 @@ data = prepare_datasets(
 )
 
 # TensorBoard setup
-log_dir = "runs/ai4i_run_1/tb"
+log_dir = f"runs/{RUN_NAME}/tb"
 os.makedirs(log_dir, exist_ok=True)
 writer = SummaryWriter(log_dir=log_dir)
 # Auto-launch TensorBoard (non-blocking) and open in browser
@@ -282,7 +295,7 @@ metric_dict = {
 writer.add_hparams(hparam_dict, metric_dict)
 
 # Save Metrics in JSON
-out_dir = "runs/ai4i_run_1"
+out_dir = f"runs/{RUN_NAME}"
 os.makedirs(out_dir, exist_ok=True)
 payload = {**core, **aucs}
 with open(os.path.join(out_dir, "metrics.json"), "w", encoding="utf-8") as f:
