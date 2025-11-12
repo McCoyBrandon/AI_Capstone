@@ -64,6 +64,8 @@ try:
     import psutil
 except Exception:
     psutil = None
+import argparse
+
 
 # Additional Reference code
 from src.models.transformer_class import TinyTabTransformer                   # model class
@@ -100,7 +102,15 @@ CLASS_NAMES = data["CLASS_NAMES"]
 N_CLASSES   = data["N_CLASSES"]
 
 # Where to save everything 
-RUNS_NAME = "nov3_run_bm"                 # e.g., "oct15_run_bm"
+# Where to save everything (CLI-configurable)
+parser = argparse.ArgumentParser(description="Grid search trainer for TinyTabTransformer.")
+parser.add_argument(
+    "--run_name", "--runs_name", dest="runs_name",
+    type=str, default="nov3_run_bm",
+    help="Folder under 'runs/' to store all tuning outputs (For example, nov11_run_bm)."
+)
+args = parser.parse_args()
+RUNS_NAME = args.runs_name
 RUNS_ROOT = os.path.join("runs", RUNS_NAME)
 
 # Default hyperparameters
