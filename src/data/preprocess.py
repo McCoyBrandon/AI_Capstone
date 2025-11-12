@@ -277,6 +277,8 @@ def prepare_datasets(
         X_num, cat_idx, y_cls, y_bin,
         test_size=test_size, random_state=random_state
     )
+    pre_counts = np.bincount(y_tr, minlength=N_CLASSES)
+    y_tr_pre_copy = y_tr.copy()
 
     # 5) Normalize numeric features using train statistics only
     Xn_tr, Xn_te, norm_params = normalize_train_test(Xn_tr, Xn_te, method=normalize)
@@ -291,6 +293,7 @@ def prepare_datasets(
             random_state=smote_random_state,
             sampling_strategy=smote_sampling
         )
+    post_counts = np.bincount(y_tr, minlength=N_CLASSES)
 
     # 7) Compute balanced class weights based on #6 training set
     class_weights, class_counts = compute_class_weights(y_tr, n_classes=N_CLASSES, device=DEVICE)
@@ -306,6 +309,12 @@ def prepare_datasets(
         "class_weights": class_weights,
         "class_counts": class_counts,
 
+        # Resampling distributions for TensorBoard logging
+        "pre_counts": pre_counts,               # BEFORE resampling
+        "post_counts": post_counts,             # AFTER resampling
+        "y_tr_labels_for_hist": y_tr,           # AFTER resampling
+        "y_tr_labels_pre_hist": y_tr_pre_copy,  # pre-SMOTE labels
+        
         # Metadata for callers
         "type_vocab": int(type_vocab),
         "mean": mean,

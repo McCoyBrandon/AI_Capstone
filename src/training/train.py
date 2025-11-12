@@ -77,7 +77,61 @@ data = prepare_datasets(
     smote_sampling="auto" # Auto or use dict like {1:desired_count, ...} if you want custom per-class
 )
 
+# TensorBoard setup
+log_dir = "runs/ai4i_run_1/tb"
+os.makedirs(log_dir, exist_ok=True)
+writer = SummaryWriter(log_dir=log_dir)
+# Auto-launch TensorBoard (non-blocking) and open in browser
+try:
+    import subprocess, sys, time, webbrowser
+    tb_cmd = [sys.executable, "-m", "tensorboard", "--logdir", log_dir, "--port", "6006"]
+    tb_proc = subprocess.Popen(tb_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    time.sleep(2)  # give server a moment to start
+    webbrowser.open("http://localhost:6006")
+    print("TensorBoard started at http://localhost:6006")
+except Exception as e:
+    print(f"TensorBoard could not auto-launch TensorBoard: {e}\n"
+          f"      Run manually: python -m tensorboard --logdir {log_dir} --port 6006")
 
+
+# Class distribution logging (pre/post SMOTE) for TensorBoard
+pre_counts  = data.get("pre_counts", None)
+post_counts = data.get("post_counts", None)
+
+# Scalars panel: one scalar per class
+if pre_counts is not None:
+    writer.add_scalars(
+        "data/class_counts_pre",
+        {name: int(pre_counts[i]) for i, name in enumerate(CLASS_NAMES)},
+        global_step=0,
+    )
+
+if post_counts is not None:
+    writer.add_scalars(
+        "data/class_counts_post",
+        {name: int(post_counts[i]) for i, name in enumerate(CLASS_NAMES)},
+        global_step=0,
+    )
+
+# Post Adjustment Histograms panel
+import torch as _torch
+y_tr_for_hist = data.get("y_tr_labels_for_hist", None)
+if y_tr_for_hist is not None:
+    writer.add_histogram(
+        "data/labels_post_hist",
+        _torch.tensor(y_tr_for_hist, dtype=_torch.int64),
+        global_step=0,
+    )
+
+# Pre Adjustment Histograms panel
+y_tr_pre_hist = data.get("y_tr_labels_pre_hist", None)
+if y_tr_pre_hist is not None:
+    writer.add_histogram(
+        "data/labels_pre_hist",
+        _torch.tensor(y_tr_pre_hist, dtype=_torch.int64),
+        global_step=0,
+    )
+    
 tr_dl         = data["tr_dl"]
 te_dl         = data["te_dl"]
 class_weights = data["class_weights"]
@@ -103,6 +157,7 @@ model = TinyTabTransformer(
     nhead=NHEAD
 ).to(DEVICE)
 
+
 ### Optimizer & Loss evaluation
 # Adam optimizer over all model parameters
 opt = torch.optim.Adam(model.parameters(), lr=LR)
@@ -110,10 +165,6 @@ opt = torch.optim.Adam(model.parameters(), lr=LR)
 # Adjusted loss to suit for a multi-class, class imbalance balancing with class weights
 loss_fn = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.00)
 
-# TensorBoard setup
-log_dir = "runs/ai4i_run_1/tb"
-os.makedirs(log_dir, exist_ok=True)
-writer = SummaryWriter(log_dir=log_dir)
 
 # Add the model graph to TensorBoard
 try:

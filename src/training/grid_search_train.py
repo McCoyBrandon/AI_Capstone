@@ -44,7 +44,7 @@ Terminal Run:
 
 View the results:
     python -m tensorboard.main --logdir runs/<YOUR RUNS_NAME> --port 6006
-    python -m tensorboard.main --logdir runs/oct15_run_bm --port 6006
+    python -m tensorboard.main --logdir runs/nov11_run_bm --port 6006
 """
 
 # Required Packages
