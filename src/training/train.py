@@ -51,6 +51,7 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader, WeightedRandomSampler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import  accuracy_score, balanced_accuracy_score, classification_report, confusion_matrix, roc_auc_score, f1_score
+from sklearn.metrics import classification_report as cr
 import os, json
 # Added for TensorBoard and plotting
 from torch.utils.tensorboard import SummaryWriter
@@ -59,10 +60,10 @@ from matplotlib.figure import Figure
 import itertools
 import argparse
 
-
 ## Additional Reference code
 from src.models.transformer_class import TinyTabTransformer                   # model class
 from src.utils.metrics import compute_core_metrics, compute_auroc_metrics, confusion_matrix_figure
+from src.utils.visualizations import plot_pre_post_smote_counts,plot_class_distribution,plot_roc_pr_curves,tb_log_figure, plot_confusion_matrix
 ## Data Processing
 from src.data.preprocess import prepare_datasets, CLASS_NAMES, N_CLASSES, DEVICE, D_MODEL, NHEAD, NUM_COLS, TARGET
 
@@ -105,7 +106,9 @@ try:
 except Exception as e:
     print(f"TensorBoard could not auto-launch TensorBoard: {e}\n"
           f"      Run manually: python -m tensorboard --logdir {log_dir} --port 6006")
-
+# Static PNGs used for paper/poster
+figs_dir = f"runs/{RUN_NAME}/figs"
+os.makedirs(figs_dir, exist_ok=True)
 
 # Class distribution logging (pre/post SMOTE) for TensorBoard
 pre_counts  = data.get("pre_counts", None)
@@ -125,7 +128,17 @@ if post_counts is not None:
         {name: int(post_counts[i]) for i, name in enumerate(CLASS_NAMES)},
         global_step=0,
     )
-
+# Visual for Original vs SMOTE class counts
+if pre_counts is not None and post_counts is not None:
+    fig = plot_pre_post_smote_counts(
+        pre_counts=pre_counts,
+        post_counts=post_counts,
+        class_names=CLASS_NAMES,
+        title="Class Counts: Original vs SMOTE"
+    )
+    tb_log_figure(writer, "data/pre_vs_post_smote_counts", fig, step=0)   # TB
+    fig.savefig(os.path.join(figs_dir, "pre_post_smote_counts.png"), dpi=300, bbox_inches="tight")
+    
 # Post Adjustment Histograms panel
 import torch as _torch
 y_tr_for_hist = data.get("y_tr_labels_for_hist", None)
@@ -144,6 +157,14 @@ if y_tr_pre_hist is not None:
         _torch.tensor(y_tr_pre_hist, dtype=_torch.int64),
         global_step=0,
     )
+
+# Histogram using visualization.py
+y_tr_for_hist = data.get("y_tr_labels_for_hist", None)
+if y_tr_for_hist is not None:
+    fig = plot_class_distribution(y_tr_for_hist, class_names=CLASS_NAMES, title="Train Labels (After SMOTE)")
+    tb_log_figure(writer, "data/train_labels_post/bar", fig, step=0)
+    fig.savefig(os.path.join(figs_dir, "train_labels_post_bar.png"), dpi=300, bbox_inches="tight")
+
     
 tr_dl         = data["tr_dl"]
 te_dl         = data["te_dl"]
@@ -252,12 +273,10 @@ print(f"Test accuracy: {core['accuracy']:.4f}")
 print(f"Macro F1: {core['macro_f1']:.4f} | Weighted F1: {core['weighted_f1']:.4f}")
 print(f"Balanced accuracy: {core['balanced_accuracy']:.4f}")
 print("\nClassification report:")
-from sklearn.metrics import classification_report as _cr
-print(_cr(all_y, preds, labels=list(range(N_CLASSES)),
+print(cr(all_y, preds, labels=list(range(N_CLASSES)),
           target_names=CLASS_NAMES, zero_division=0))
 print("Confusion matrix (rows=true, cols=pred):")
-import numpy as _np
-print(_np.array(core["confusion_matrix"]))
+print(np.array(core["confusion_matrix"]))
 
 print("\nPer-class AUROC:")
 for k, v in aucs["per_class_auc"].items():
@@ -265,6 +284,12 @@ for k, v in aucs["per_class_auc"].items():
 for k in ("macro_auc", "micro_auc", "weighted_auc", "binary_auc"):
     val = aucs[k]
     print(f"{k}: {'N/A' if val is None else f'{val:.4f}'}")
+
+# Saving ROC and PR Curves figures for paper
+y_true_onehot = np.eye(N_CLASSES, dtype=int)[all_y]  # (N, C)
+fig = plot_roc_pr_curves(y_true_onehot=y_true_onehot, y_prob=probs, class_names=CLASS_NAMES)
+tb_log_figure(writer, "eval/roc_pr_curves", fig, step=epoch)  # log at final epoch index
+fig.savefig(os.path.join(figs_dir, f"roc_pr_curves_epoch{epoch}.png"), dpi=300, bbox_inches="tight")
 
 # TensorBoard scalars
 epoch_tag = epoch  # tag with last epoch index
@@ -281,8 +306,21 @@ for k in ("macro_auc", "micro_auc", "weighted_auc", "binary_auc"):
         writer.add_scalar(f"eval/{k}", aucs[k], epoch_tag)
 
 # Confusion matrix figure
-cm_fig = confusion_matrix_figure(_np.array(core["confusion_matrix"]), CLASS_NAMES)
-writer.add_figure("eval/confusion_matrix", cm_fig, epoch_tag)
+# Suppose class 0 == "NoFailure"
+cm = np.array(core["confusion_matrix"])
+cm_fig = plot_confusion_matrix(
+    cm=cm,
+    class_names=CLASS_NAMES,
+    title="Confusion Matrix (Counts; scaled w/o NoFailure→NoFailure)",
+    cmap="magma_r",
+    log_scale=False,                   # True is also worth trying for even more pop
+    robust_clip=(1, 99),
+    scale_exclude_cells=[(0, 0)],      # <-- key: ignore NF→NF for color scaling
+    annotate=True
+)
+writer.add_figure("eval/confusion_matrix_focused", cm_fig, epoch_tag)
+cm_fig.savefig(os.path.join(figs_dir, f"confusion_matrix_focused_epoch{epoch}.png"),
+               dpi=300, bbox_inches="tight")
 
 # hparams summary
 hparam_dict = {"lr": LR, "batch_size": BATCH, "d_model": D_MODEL, "nhead": NHEAD, "epochs": EPOCHS}

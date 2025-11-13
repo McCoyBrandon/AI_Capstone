@@ -19,9 +19,13 @@ from typing import List, Optional, Sequence, Tuple, Union
 import math
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score
-
-
+try:
+    from sklearn.metrics import roc_curve, auc,precision_recall_curve, average_precision_score
+    _SKLEARN_AVAILABLE = True
+except Exception:
+    _SKLEARN_AVAILABLE = False
+from matplotlib.colors import LogNorm
+    
 # Helper Functions
 def _as_np(x: Union[np.ndarray, Sequence]) -> np.ndarray:
     return x if isinstance(x, np.ndarray) else np.asarray(x)
@@ -47,21 +51,37 @@ def _auto_bins(x: np.ndarray, max_bins: int = 40) -> int:
 
 
 # Functions for distributions / SMOTE
-def plot_class_distribution(y: Sequence[int], class_names: Optional[List[str]] = None,
+def plot_class_distribution(y: Sequence[int],
+                            class_names: Optional[List[str]] = None,
                             title: str = "Class Distribution"):
-    y = _as_np(y)
-    classes, counts = np.unique(y, return_counts=True)
+    y = _as_np(y).astype(int)
+
     if class_names is None:
-        class_names = [str(c) for c in classes]
+        # Fall back to unique labels present
+        classes = np.unique(y)
+        counts = np.bincount(y - y.min())  # loose fallback
+        xticks = np.arange(len(classes))
+        xticklabels = [str(c) for c in classes]
+    else:
+        C = len(class_names)
+        if (y < 0).any() or (y >= C).any():
+            raise ValueError(
+                f"y contains label outside [0, {C-1}] range required by class_names."
+            )
+        counts = np.bincount(y, minlength=C)
+        xticks = np.arange(C)
+        xticklabels = class_names
+
     fig, ax = plt.subplots(figsize=(8, 4.5))
-    ax.bar(np.arange(len(classes)), counts)
-    ax.set_xticks(np.arange(len(classes)))
-    ax.set_xticklabels(class_names)
+    ax.bar(xticks, counts)
+    ax.set_xticks(xticks)
+    ax.set_xticklabels(xticklabels)
     ax.set_ylabel("Count")
     ax.set_title(title)
-    ax.grid(True, axis="y", linestyle=":", linewidth=0.6)
+    ax.grid(True, axis="y", linestyle=":", linewidth=0.5)
     fig.tight_layout()
     return fig
+
 
 def plot_pre_post_smote_counts(pre_counts: Sequence[int], post_counts: Sequence[int],
                                class_names: List[str],
@@ -199,49 +219,155 @@ def plot_training_curves(epochs: Sequence[int],
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     return fig
 
-def plot_confusion_matrix(cm: np.ndarray, class_names: List[str],
-                          normalize: bool = True, title: str = "Confusion Matrix"):
-    cm = _as_np(cm).astype(float)
-    if normalize:
-        rs = cm.sum(axis=1, keepdims=True)
-        rs[rs == 0] = 1.0
-        cm = cm / rs
+def plot_confusion_matrix(
+    cm: np.ndarray,
+    class_names,
+    title: str = "Confusion Matrix",
+    cmap: str = "magma",               # nice dark-low → bright-high gradient
+    log_scale: bool = False,           # emphasize small-but-nonzero cells
+    robust_clip: tuple = (1, 99),      # percentile clip using *focused* cells
+    scale_exclude_cells: list = None,  # e.g., [(0, 0)] to exclude NoFailure→NoFailure
+    annotate: bool = True
+):
+    """
+    Confusion-matrix heatmap with color scaling based on a focused subset of cells.
+    - Uses raw counts (no normalization).
+    - Color limits (vmin/vmax) are computed from all cells EXCEPT those listed in
+      'scale_exclude_cells', so outliers (e.g., NoFailure→NoFailure) don't crush contrast.
+    - You still see every cell and its count; only the color scale ignores excluded cells.
+    """
+    M = np.asarray(cm, dtype=float)
+    C = M.shape[0]
 
-    fig, ax = plt.subplots(figsize=(6.1, 5.3))
-    im = ax.imshow(cm, interpolation="nearest", aspect="auto")
-    ax.set_xticks(np.arange(len(class_names)))
-    ax.set_yticks(np.arange(len(class_names)))
+    # Build a mask of cells to use for scaling
+    mask = np.ones_like(M, dtype=bool)
+    if scale_exclude_cells:
+        for (r, c) in scale_exclude_cells:
+            if 0 <= r < C and 0 <= c < C:
+                mask[r, c] = False
+
+    focus_vals = M[mask]
+    # if all focus values are equal/empty, fallback to all non-excluded
+    valid_focus = focus_vals[np.isfinite(focus_vals)]
+    if valid_focus.size == 0:
+        valid_focus = M.ravel()
+
+    lo_pct, hi_pct = robust_clip
+    vmin = np.percentile(valid_focus, lo_pct) if valid_focus.size else M.min()
+    vmax = np.percentile(valid_focus, hi_pct) if valid_focus.size else M.max()
+    if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin == vmax:
+        vmin = min(vmin, 0.0)
+        vmax = max(vmax, vmin + 1e-6)
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(6.6, 5.6))
+    if log_scale:
+        eps = 1e-12
+        display = np.where(M <= 0, eps, M)
+        im = ax.imshow(display, aspect="auto",
+                       norm=LogNorm(vmin=max(vmin, eps), vmax=max(vmax, eps)),
+                       cmap=cmap)
+        cbar_label = "Count (log scale)"
+    else:
+        im = ax.imshow(M, aspect="auto", vmin=vmin, vmax=vmax, cmap=cmap)
+        cbar_label = "Count"
+
+    ax.set_xticks(np.arange(C)); ax.set_yticks(np.arange(C))
     ax.set_xticklabels(class_names, rotation=45, ha="right")
     ax.set_yticklabels(class_names)
-    ax.set_xlabel("Predicted"); ax.set_ylabel("True"); ax.set_title(title)
+    ax.set_xlabel("Predicted"); ax.set_ylabel("True")
+    ax.set_title(title)
+
+    if annotate:
+        mid = (vmin + vmax) / 2.0
+        for i in range(C):
+            for j in range(C):
+                val = int(M[i, j])
+                ax.text(
+                    j, i, f"{val}",
+                    ha="center", va="center",
+                    fontsize=8,
+                    color="white" if M[i, j] > mid else "black"
+                )
+
     cbar = fig.colorbar(im, ax=ax, shrink=0.85)
-    cbar.ax.set_ylabel("Proportion" if normalize else "Count", rotation=90)
+    cbar.ax.set_ylabel(cbar_label, rotation=90)
     fig.tight_layout()
     return fig
 
-def plot_roc_pr_curves(y_true_onehot: np.ndarray, y_prob: np.ndarray,
-                       class_names: List[str],
-                       suptitle: str = "ROC & Precision-Recall (One-vs-Rest)"):
-    if not _SKLEARN_AVAILABLE:
+def plot_roc_pr_curves(
+    y_true_onehot: np.ndarray,
+    y_prob: np.ndarray,
+    class_names: List[str],
+    suptitle: str = "ROC & Precision-Recall (One-vs-Rest)"
+):
+    """
+    Plots per-class ROC and PR curves.
+    - Skips classes with zero positives or zero negatives (ROC/PR undefined).
+
+    y_true_onehot: shape (N, C) of {0,1}
+    y_prob:        shape (N, C) of predicted probabilities
+    """
+    # Check sklearn availability
+    if not ("_SKLEARN_AVAILABLE" in globals() and _SKLEARN_AVAILABLE):
         raise ImportError("scikit-learn is required for plot_roc_pr_curves.")
-    y_true_onehot = _as_np(y_true_onehot); y_prob = _as_np(y_prob)
-    C = y_true_onehot.shape[1]
+
+    y_true_onehot = _as_np(y_true_onehot)
+    y_prob = _as_np(y_prob)
+    N, C = y_true_onehot.shape
+    if y_prob.shape != (N, C):
+        raise ValueError(f"y_prob shape {y_prob.shape} must match y_true_onehot {y_true_onehot.shape}")
+
     fig, axs = plt.subplots(1, 2, figsize=(12.5, 5))
     ax_roc, ax_pr = axs
 
-    for c in range(C):
-        fpr, tpr, _ = roc_curve(y_true_onehot[:, c], y_prob[:, c])
-        ax_roc.plot(fpr, tpr, label=f"{class_names[c]} (AUC={auc(fpr,tpr):.3f})")
-    ax_roc.plot([0, 1], [0, 1], linestyle="--", linewidth=1)
-    ax_roc.set_xlabel("FPR"); ax_roc.set_ylabel("TPR"); ax_roc.set_title("ROC Curves")
-    ax_roc.grid(True, linestyle=":", linewidth=0.5); ax_roc.legend(frameon=False, fontsize=8)
+    plotted_any = False
+    skipped = []
 
     for c in range(C):
-        precision, recall, _ = precision_recall_curve(y_true_onehot[:, c], y_prob[:, c])
-        ap = average_precision_score(y_true_onehot[:, c], y_prob[:, c])
+        y_c = y_true_onehot[:, c]
+        p_c = y_prob[:, c]
+        pos = int(y_c.sum())
+        neg = int((1 - y_c).sum())
+
+        # Skip if class is absent or degenerate for ROC/PR
+        if pos == 0 or neg == 0:
+            skipped.append(class_names[c] if class_names else str(c))
+            continue
+
+        # ROC
+        fpr, tpr, _ = roc_curve(y_c, p_c)
+        ax_roc.plot(fpr, tpr, label=f"{class_names[c]} (AUC={auc(fpr, tpr):.3f})")
+
+        # PR
+        precision, recall, _ = precision_recall_curve(y_c, p_c)
+        ap = average_precision_score(y_c, p_c)
         ax_pr.plot(recall, precision, label=f"{class_names[c]} (AP={ap:.3f})")
-    ax_pr.set_xlabel("Recall"); ax_pr.set_ylabel("Precision"); ax_pr.set_title("Precision-Recall Curves")
-    ax_pr.grid(True, linestyle=":", linewidth=0.5); ax_pr.legend(frameon=False, fontsize=8)
+
+        plotted_any = True
+
+    # ROC panel
+    ax_roc.plot([0, 1], [0, 1], linestyle="--", linewidth=1)
+    ax_roc.set_xlabel("FPR")
+    ax_roc.set_ylabel("TPR")
+    ax_roc.set_title("ROC Curves")
+    ax_roc.grid(True, linestyle=":", linewidth=0.5)
+    ax_roc.legend(frameon=False, fontsize=8)
+
+    # PR panel
+    ax_pr.set_xlabel("Recall")
+    ax_pr.set_ylabel("Precision")
+    ax_pr.set_title("Precision-Recall Curves")
+    ax_pr.grid(True, linestyle=":", linewidth=0.5)
+    ax_pr.legend(frameon=False, fontsize=8)
+
+    # Note skipped classes
+    if skipped:
+        suptitle = f"{suptitle}\n(skipped: {', '.join(skipped)})"
+
+    if not plotted_any:
+        plt.close(fig)
+        raise ValueError("No valid classes to plot ROC/PR (all classes were absent or degenerate).")
 
     fig.suptitle(suptitle, y=0.99)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
@@ -296,7 +422,7 @@ def plot_embedding_2d(embedding_2d: np.ndarray, y: Optional[Sequence[int]] = Non
 
 # TensorBoard convenience
 def tb_log_figure(writer, tag: str, fig, step: int, close: bool = True):
-    # Add a Matplotlib figure to a TensorBoard, and optionally closing it.
+    # Add a Matplotlib figure to a TensorBoard writer, optionally closing it.
     writer.add_figure(tag, fig, step)
     if close:
         plt.close(fig)
