@@ -64,6 +64,7 @@ import argparse
 from src.models.transformer_class import TinyTabTransformer                   # model class
 from src.utils.metrics import compute_core_metrics, compute_auroc_metrics, confusion_matrix_figure
 from src.utils.visualizations import plot_pre_post_smote_counts,plot_class_distribution,plot_roc_pr_curves,tb_log_figure, plot_confusion_matrix
+from src.utils.drift_detection import run_torchdrift_drift_check
 ## Data Processing
 from src.data.preprocess import prepare_datasets, CLASS_NAMES, N_CLASSES, DEVICE, D_MODEL, NHEAD, NUM_COLS, TARGET
 
@@ -83,6 +84,7 @@ parser.add_argument("--num_layers", type=int, default=2)
 parser.add_argument("--lr", type=float, default=1e-3)
 parser.add_argument("--weight_decay", type=float, default=0.0)
 parser.add_argument("--label_smoothing", type=float, default=0.00)
+parser.add_argument("--enable_drift",action="store_true",help="If set, run TorchDrift drift detection after training.")
 args = parser.parse_args()
 RUN_NAME = args.run_name
 
@@ -208,8 +210,6 @@ model = TinyTabTransformer(
     num_layers=NUM_LAYERS
 ).to(DEVICE)
 
-
-
 ### Optimizer & Loss evaluation
 # Adam optimizer over all model parameters
 opt = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
@@ -285,6 +285,24 @@ preds      = probs.argmax(axis=1)
 core = compute_core_metrics(all_y, preds, CLASS_NAMES)
 aucs = compute_auroc_metrics(all_y, probs, CLASS_NAMES)
 
+# Drift Detetection
+drift_metrics = None
+if args.enable_drift:
+    try:
+        drift_metrics = run_torchdrift_drift_check(
+            tr_dl=tr_dl,
+            te_dl=te_dl,
+            device=DEVICE,
+            writer=writer,
+            tb_step=epoch_tag,
+            tb_prefix="drift",
+        )
+        print("\n[Drift detection] TorchDrift metrics:")
+        for k, v in drift_metrics.items():
+            print(f"  {k}: {v:.6f}")
+    except RuntimeError as e:
+        print(f"[Drift detection] Skipping TorchDrift: {e}")
+
 # Console prints
 print(f"Test accuracy: {core['accuracy']:.4f}")
 print(f"Macro F1: {core['macro_f1']:.4f} | Weighted F1: {core['weighted_f1']:.4f}")
@@ -358,9 +376,13 @@ writer.add_hparams(hparam_dict, metric_dict)
 out_dir = f"runs/{RUN_NAME}"
 os.makedirs(out_dir, exist_ok=True)
 payload = {**core, **aucs}
+if drift_metrics is not None:
+    payload["drift_metrics"] = drift_metrics
+
 with open(os.path.join(out_dir, "metrics.json"), "w", encoding="utf-8") as f:
     import json as _json
     _json.dump(payload, f, indent=2)
+
 
 # Save checkpoint
 ckpt = {

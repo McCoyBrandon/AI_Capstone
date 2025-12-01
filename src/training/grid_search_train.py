@@ -71,7 +71,7 @@ import argparse
 from src.models.transformer_class import TinyTabTransformer                   
 from src.data.preprocess import prepare_datasets, CLASS_NAMES, N_CLASSES, DEVICE
 from src.utils.metrics import compute_core_metrics, compute_auroc_metrics, confusion_matrix_figure
-
+from src.utils.drift_detection import run_torchdrift_drift_check
 
 # Data Processing
 CSV_PATH = "src/data/ai4i2020.csv"
@@ -143,7 +143,8 @@ def train_one_run(hp, run_name):
     EPOCHS_ = int(hp.get("EPOCHS", EPOCHS))
     WD_           = float(hp.get("WD", WD)) 
     LABEL_SMOOTH_ = float(hp.get("LABEL_SMOOTH", LABEL_SMOOTH))
-    
+    ENABLE_DRIFT = bool(hp.get("ENABLE_DRIFT", False))
+
     # Build model/opt/loss
     model = TinyTabTransformer(
         n_num=5,
@@ -323,8 +324,31 @@ def train_one_run(hp, run_name):
     os.makedirs(ckpt_dir, exist_ok=True)
     torch.save({"model_state_dict": model.state_dict()}, os.path.join(ckpt_dir, "model.ckpt"))
 
+    metrics_payload = {**core, **aucs}
+    if drift_metrics is not None:
+        metrics_payload["drift_metrics"] = drift_metrics
+
     with open(os.path.join(ckpt_dir, "metrics.json"), "w", encoding="utf-8") as f:
-        json.dump({**core, **aucs}, f, indent=2)
+        json.dump(metrics_payload, f, indent=2)
+
+        
+    drift_metrics = None
+    if ENABLE_DRIFT:
+        try:
+            drift_metrics = run_torchdrift_drift_check(
+                tr_dl=tr_dl,
+                te_dl=te_dl,
+                device=DEVICE,
+                writer=writer,
+                tb_step=epoch_tag,   # use final epoch index
+                tb_prefix="drift",
+            )
+            print("\n[Drift detection] TorchDrift metrics:")
+            for k, v in drift_metrics.items():
+                print(f"  {k}: {v:.6f}")
+        except RuntimeError as e:
+            # e.g., TorchDrift not installed
+            print(f"[Drift detection] Skipping TorchDrift: {e}")
 
     writer.close()
     return core["accuracy"], core["macro_f1"], core["weighted_f1"], core["balanced_accuracy"]
@@ -349,7 +373,9 @@ def main():
         "NUM_LAYERS": [2, 3],
         "WD": [0.0, 1e-4],
         "LABEL_SMOOTH": [0.0, 0.05],
+        "ENABLE_DRIFT": [False, True],
     }
+
 
     best = None
     best_key = None
@@ -363,7 +389,9 @@ def main():
         run_name = (
             f"D{hp['D_MODEL']}-H{hp['NHEAD']}-lr{hp['LR']}"
             f"-wd{hp['WD']}-ls{hp['LABEL_SMOOTH']}"
+            f"-drift{int(hp.get('ENABLE_DRIFT', False))}"
         )
+
         print(f"\nTuning run: {run_name} ===")
         acc, macro_f1, weighted_f1, bacc = train_one_run(hp, run_name)
 
