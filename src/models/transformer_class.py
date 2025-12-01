@@ -40,8 +40,27 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if present, e
 
 ### Model Definition
 class TinyTabTransformer(nn.Module):
-    def __init__(self, n_num, type_vocab, d_model=64, nhead=2):
+    def __init__(
+        self,
+        n_num,
+        type_vocab,
+        d_model: int = 64,
+        nhead: int = 2,
+        dim_feedforward: int = 128,   
+        dropout: float = 0.0,         
+        num_layers: int = 2,          
+        activation: str = "relu",    
+    ):
         super().__init__()
+
+        self.n_num          = n_num
+        self.type_vocab     = type_vocab
+        self.d_model        = d_model
+        self.nhead          = nhead
+        self.dim_feedforward = dim_feedforward
+        self.dropout        = dropout
+        self.num_layers     = num_layers
+        self.activation     = activation
 
         # Per-feature linear projection implemented as a learned affine transform:
         # For each numeric feature i, we store W[i] (size d_model) and b[i] (size d_model).
@@ -55,17 +74,20 @@ class TinyTabTransformer(nn.Module):
         # Learned classification [CLS] token (1 x 1 x d_model)
         self.cls = nn.Parameter(torch.zeros(1, 1, d_model))
 
-        # Single Transformer encoder layer (self-attention + MLP) with GELU activation.
-        # batch_first=True -> input/output shape is [B, T, d_model].
-        enc = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=nhead,
-            dim_feedforward=128,     # small MLP hidden layer inside the encoder
-            dropout=0.0,             # May need to add dropout depending on evaluation
-            batch_first=True,
-            activation="gelu",
+        # Transformer encoder layer 
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=self.d_model,
+            nhead=self.nhead,
+            dim_feedforward=self.dim_feedforward,  
+            dropout=self.dropout,                  
+            activation=self.activation,            
+            batch_first=True,                      
         )
-        self.encoder = nn.TransformerEncoder(enc, num_layers=1)
+
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=self.num_layers,           
+        )
 
         # Linear head that maps the [CLS] hidden state adjusted to the multi-classifaction
         self.head = nn.Linear(d_model, N_CLASSES)

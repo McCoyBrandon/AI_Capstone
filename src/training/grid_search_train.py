@@ -68,7 +68,7 @@ import argparse
 
 
 # Additional Reference code
-from src.models.transformer_class import TinyTabTransformer                   # model class
+from src.models.transformer_class import TinyTabTransformer                   
 from src.data.preprocess import prepare_datasets, CLASS_NAMES, N_CLASSES, DEVICE
 from src.utils.metrics import compute_core_metrics, compute_auroc_metrics, confusion_matrix_figure
 
@@ -118,13 +118,22 @@ LR      = 1e-3
 EPOCHS  = 10
 D_MODEL = 64
 NHEAD   = 2
+WD            = 0.0   # weight decay for Adam
+LABEL_SMOOTH  = 0.0   # label smoothing for CrossEntropyLoss
 
 ## Functions to assist with the hypertuning tracking
 def train_one_run(hp, run_name):
     """
     Train/evaluate a single run with hyperparameters:
-      hp = {"LR": float, "D_MODEL": int, "NHEAD": int, "EPOCHS": int}
-    Logs to TensorBoard under runs/ai4i_tune/<run_name> and saves a checkpoint/metrics.
+      hp = {
+          "LR": float,
+          "D_MODEL": int,
+          "NHEAD": int,
+          "EPOCHS": int,
+          "WD": float,             # weight decay for Adam
+          "LABEL_SMOOTH": float,   # label smoothing for CE loss
+      }
+    Logs to TensorBoard under runs/<RUNS_NAME>/<run_name> and saves a checkpoint/metrics.
     Returns (acc, macro_f1, weighted_f1, bacc).
     """
     # Defaulting if hyper parameters not provided
@@ -132,16 +141,28 @@ def train_one_run(hp, run_name):
     D_MODEL_= int(hp.get("D_MODEL", D_MODEL))
     NHEAD_  = int(hp.get("NHEAD", NHEAD))
     EPOCHS_ = int(hp.get("EPOCHS", EPOCHS))
-
+    WD_           = float(hp.get("WD", WD)) 
+    LABEL_SMOOTH_ = float(hp.get("LABEL_SMOOTH", LABEL_SMOOTH))
+    
     # Build model/opt/loss
     model = TinyTabTransformer(
-        n_num=5,  # Number of columns
+        n_num=5,
         type_vocab=type_vocab,
         d_model=D_MODEL_,
         nhead=NHEAD_,
+        dim_feedforward=hp.get("DIM_FEEDFORWARD", 128),
+        dropout=hp.get("DROPOUT", 0.0),
+        num_layers=hp.get("NUM_LAYERS", 2),
     ).to(DEVICE)
-    opt = torch.optim.Adam(model.parameters(), lr=LR_)
-    loss_fn = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.00)
+    opt = torch.optim.Adam(
+        model.parameters(),
+        lr=LR_,
+        weight_decay=WD_, 
+    )
+    loss_fn = nn.CrossEntropyLoss(
+        weight=class_weights,
+        label_smoothing=LABEL_SMOOTH_,  
+    )
 
     # TB writer per run TensorBoard
     log_dir = os.path.join(RUNS_ROOT, run_name)
@@ -172,14 +193,14 @@ def train_one_run(hp, run_name):
             )
         model.train()
     except Exception as e:
-        print(f"[TB] Skipping add_graph due to: {e}")
+        print(f"Tensorboard skipping add_graph due to: {e}")
 
     # Training procedure
     global_step = 0
     for epoch in range(1, EPOCHS_ + 1):
         model.train()
         total, count = 0.0, 0
-        epoch_t0 = time.perf_counter() # Epoch timer
+        epoch_t0 = time.perf_counter()  # Epoch timer
         step_times = []
         thr_samples_per_sec = []
         for xb_num, xb_type, yb in tr_dl:
@@ -190,6 +211,7 @@ def train_one_run(hp, run_name):
             loss = loss_fn(logits, yb)
             loss.backward()
             opt.step()
+
             # batch timer end
             dt = time.perf_counter() - step_t0
             step_times.append(dt)
@@ -224,7 +246,7 @@ def train_one_run(hp, run_name):
 
         writer.add_scalar("loss/epoch", total / count, epoch)
         print(f"Epoch {epoch}/{EPOCHS_} - train loss: {total / count:.4f}")
-
+        
     # Evaluattion Procedure and saving metrics with checkpoints
     model.eval()
     all_logits, all_y = [], []
@@ -280,8 +302,13 @@ def train_one_run(hp, run_name):
     writer.add_figure("eval/confusion_matrix", cm_fig, epoch_tag)
 
     hparam_dict = {
-        "lr": LR_, "batch_size": getattr(tr_dl, 'batch_size', None) or 256,
-        "d_model": D_MODEL_, "nhead": NHEAD_, "epochs": EPOCHS_,
+        "lr": LR_,
+        "batch_size": getattr(tr_dl, 'batch_size', None) or 256,
+        "d_model": D_MODEL_,
+        "nhead": NHEAD_,
+        "epochs": EPOCHS_,
+        "weight_decay": WD_,
+        "label_smoothing": LABEL_SMOOTH_,
     }
     metric_dict = {
         "hparam/accuracy":          float(core["accuracy"]),
@@ -302,8 +329,6 @@ def train_one_run(hp, run_name):
     writer.close()
     return core["accuracy"], core["macro_f1"], core["weighted_f1"], core["balanced_accuracy"]
 
-    return acc, macro_f1, weighted_f1, bacc
-
 
 # Hyperparameter Driver
 def _product_dict(grid):
@@ -313,29 +338,43 @@ def _product_dict(grid):
 
 
 def main():
-    # Defining hyperparameter grid
+    # Defining hyperparameter grid (expand as needed)
     grid = {
         "D_MODEL": [64, 128],
-        "NHEAD":  [2, 4],
-        "LR":     [1e-3, 3e-4],
-        "EPOCHS": [10],  # keep fixed initially for speed/fairness
+        "NHEAD": [2, 4],
+        "LR": [1e-3, 3e-4],
+        "EPOCHS": [20],
+        "DIM_FEEDFORWARD": [128, 256],
+        "DROPOUT": [0.0, 0.1],
+        "NUM_LAYERS": [2, 3],
+        "WD": [0.0, 1e-4],
+        "LABEL_SMOOTH": [0.0, 0.05],
     }
 
     best = None
     best_key = None
 
     for hp in _product_dict(grid):
-        run_name = f"D{hp['D_MODEL']}-H{hp['NHEAD']}-lr{hp['LR']}"
+        # Debug: validate D_MODEL % NHEAD == 0
+        if int(hp["D_MODEL"]) % int(hp["NHEAD"]) != 0:
+            print(f"Skipping invalid combo: D_MODEL={hp['D_MODEL']}, NHEAD={hp['NHEAD']}")
+            continue
+
+        run_name = (
+            f"D{hp['D_MODEL']}-H{hp['NHEAD']}-lr{hp['LR']}"
+            f"-wd{hp['WD']}-ls{hp['LABEL_SMOOTH']}"
+        )
         print(f"\nTuning run: {run_name} ===")
         acc, macro_f1, weighted_f1, bacc = train_one_run(hp, run_name)
 
-        score = macro_f1  # selection metric (robust for imbalance)
+        score = macro_f1
         if best is None or score > best:
             best = score
             best_key = (run_name, hp)
 
     print("\nBest run Results")
     print(best_key, "score(macro_f1)=", best)
+
 
 
 if __name__ == "__main__":
