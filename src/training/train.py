@@ -68,13 +68,21 @@ from src.utils.visualizations import plot_pre_post_smote_counts,plot_class_distr
 from src.data.preprocess import prepare_datasets, CLASS_NAMES, N_CLASSES, DEVICE, D_MODEL, NHEAD, NUM_COLS, TARGET
 
 # Argument parsing for dynamic run naming
-parser = argparse.ArgumentParser(description="Train TinyTabTransformer with optional run name flag.")
+parser = argparse.ArgumentParser(description="Train TinyTabTransformer single parameter set training.")
 parser.add_argument(
     "--run_name",
     type=str,
     default="Test_run_1",
     help="Name of the run folder under 'runs/'. Example: --run_name ai4i_run_1"
 )
+parser.add_argument("--d_model", type=int, default=64)
+parser.add_argument("--nhead", type=int, default=2)
+parser.add_argument("--dim_feedforward", type=int, default=128)
+parser.add_argument("--dropout", type=float, default=0.0)
+parser.add_argument("--num_layers", type=int, default=2)
+parser.add_argument("--lr", type=float, default=1e-3)
+parser.add_argument("--weight_decay", type=float, default=0.0)
+parser.add_argument("--label_smoothing", type=float, default=0.00)
 args = parser.parse_args()
 RUN_NAME = args.run_name
 
@@ -175,11 +183,17 @@ mean          = data["mean"]
 std           = data["std"]
 
 # Hyperparameters for the model
-BATCH = 256                       # Mini-batch size for training/eval
-EPOCHS = 10                       # Number of passes over the training data
-LR = 1e-3                         # Adam learning rate
-D_MODEL = 64                      # Token embedding size (hidden size)
-NHEAD = 2                         # Number of attention heads (must divide D_MODEL)
+BATCH  = 256                            # Mini-batch size for training/eval
+EPOCHS = 10                             # Number of passes over the training data
+LR     = args.lr                        # Adam learning rate
+D_MODEL = args.d_model                  # Token embedding size (hidden size)
+NHEAD   = args.nhead                    # Number of attention heads (must divide D_MODEL)
+DIM_FEEDFORWARD = args.dim_feedforward
+DROPOUT = args.dropout
+NUM_LAYERS = args.num_layers
+WEIGHT_DECAY = args.weight_decay
+LABEL_SMOOTH = args.label_smoothing
+
 # Processing managagement
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if present, else CPU
 
@@ -188,17 +202,20 @@ model = TinyTabTransformer(
     n_num=len(NUM_COLS),
     type_vocab=type_vocab,
     d_model=D_MODEL,
-    nhead=NHEAD
+    nhead=NHEAD,
+    dim_feedforward=DIM_FEEDFORWARD,
+    dropout=DROPOUT,
+    num_layers=NUM_LAYERS
 ).to(DEVICE)
+
 
 
 ### Optimizer & Loss evaluation
 # Adam optimizer over all model parameters
-opt = torch.optim.Adam(model.parameters(), lr=LR)
+opt = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
 
 # Adjusted loss to suit for a multi-class, class imbalance balancing with class weights
-loss_fn = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.00)
-
+loss_fn = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=LABEL_SMOOTH)
 
 # Add the model graph to TensorBoard
 try:
@@ -323,7 +340,12 @@ cm_fig.savefig(os.path.join(figs_dir, f"confusion_matrix_focused_epoch{epoch}.pn
                dpi=300, bbox_inches="tight")
 
 # hparams summary
-hparam_dict = {"lr": LR, "batch_size": BATCH, "d_model": D_MODEL, "nhead": NHEAD, "epochs": EPOCHS}
+hparam_dict = {
+    "lr": LR, "batch_size": BATCH, "d_model": D_MODEL, "nhead": NHEAD,
+    "epochs": EPOCHS, "dim_feedforward": DIM_FEEDFORWARD, "dropout": DROPOUT,
+    "num_layers": NUM_LAYERS, "weight_decay": WEIGHT_DECAY,
+    "label_smoothing": LABEL_SMOOTH
+}
 metric_dict = {
     "hparam/accuracy":          core["accuracy"],
     "hparam/macro_f1":          core["macro_f1"],
