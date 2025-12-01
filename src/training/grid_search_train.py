@@ -52,7 +52,7 @@ import numpy as np
 import pandas as pd               
 import torch                     
 import torch.nn as nn             
-from sklearn.metrics import  accuracy_score, balanced_accuracy_score, classification_report, confusion_matrix, roc_auc_score, f1_score
+from sklearn.metrics import classification_report as _cr
 import os, json
 # Added for TensorBoard and plotting
 from torch.utils.tensorboard import SummaryWriter
@@ -272,11 +272,9 @@ def train_one_run(hp, run_name):
     print(f"Macro F1: {core['macro_f1']:.4f} | Weighted F1: {core['weighted_f1']:.4f}")
     print(f"Balanced accuracy: {core['balanced_accuracy']:.4f}")
     print("\nClassification report:")
-    from sklearn.metrics import classification_report as _cr
     print(_cr(all_y, preds, labels=list(range(N_CLASSES)), target_names=CLASS_NAMES, zero_division=0))
-    import numpy as _np
     print("Confusion matrix (rows=true, cols=pred):")
-    print(_np.array(core["confusion_matrix"]))
+    print(np.array(core["confusion_matrix"]))
 
     print("\nPer-class AUROC:")
     for k, v in aucs["per_class_auc"].items():
@@ -299,7 +297,7 @@ def train_one_run(hp, run_name):
         if aucs[k] is not None:
             writer.add_scalar(f"eval/{k}", aucs[k], epoch_tag)
 
-    cm_fig = confusion_matrix_figure(_np.array(core["confusion_matrix"]), CLASS_NAMES)
+    cm_fig = confusion_matrix_figure(np.array(core["confusion_matrix"]), CLASS_NAMES)
     writer.add_figure("eval/confusion_matrix", cm_fig, epoch_tag)
 
     hparam_dict = {
@@ -319,19 +317,7 @@ def train_one_run(hp, run_name):
     }
     writer.add_hparams(hparam_dict, metric_dict)
 
-    # Save per-run artifacts
-    ckpt_dir = os.path.join(RUNS_ROOT, run_name)
-    os.makedirs(ckpt_dir, exist_ok=True)
-    torch.save({"model_state_dict": model.state_dict()}, os.path.join(ckpt_dir, "model.ckpt"))
-
-    metrics_payload = {**core, **aucs}
-    if drift_metrics is not None:
-        metrics_payload["drift_metrics"] = drift_metrics
-
-    with open(os.path.join(ckpt_dir, "metrics.json"), "w", encoding="utf-8") as f:
-        json.dump(metrics_payload, f, indent=2)
-
-        
+    # Drift Detection
     drift_metrics = None
     if ENABLE_DRIFT:
         try:
@@ -340,15 +326,28 @@ def train_one_run(hp, run_name):
                 te_dl=te_dl,
                 device=DEVICE,
                 writer=writer,
-                tb_step=epoch_tag,   # use final epoch index
+                tb_step=epoch_tag,
                 tb_prefix="drift",
             )
             print("\n[Drift detection] TorchDrift metrics:")
             for k, v in drift_metrics.items():
                 print(f"  {k}: {v:.6f}")
         except RuntimeError as e:
-            # e.g., TorchDrift not installed
             print(f"[Drift detection] Skipping TorchDrift: {e}")
+
+    # Save Model & Metrics
+    ckpt_dir = os.path.join(RUNS_ROOT, run_name)
+    os.makedirs(ckpt_dir, exist_ok=True)
+
+    torch.save({"model_state_dict": model.state_dict()},
+               os.path.join(ckpt_dir, "model.ckpt"))
+
+    metrics_payload = {**core, **aucs}
+    if drift_metrics is not None:
+        metrics_payload["drift_metrics"] = drift_metrics
+
+    with open(os.path.join(ckpt_dir, "metrics.json"), "w", encoding="utf-8") as f:
+        json.dump(metrics_payload, f, indent=2)
 
     writer.close()
     return core["accuracy"], core["macro_f1"], core["weighted_f1"], core["balanced_accuracy"]
@@ -373,9 +372,8 @@ def main():
         "NUM_LAYERS": [2, 3],
         "WD": [0.0, 1e-4],
         "LABEL_SMOOTH": [0.0, 0.05],
-        "ENABLE_DRIFT": [False, True],
+        "ENABLE_DRIFT": [True],
     }
-
 
     best = None
     best_key = None

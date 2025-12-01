@@ -267,6 +267,7 @@ for epoch in range(1, EPOCHS + 1):
 
     # Print average training loss for this epoch
     print(f"Epoch {epoch}/{EPOCHS} - train loss: {total / count:.4f}")
+epoch_tag = epoch # Tag for the final epoch for outputs
 
 ### Evaluation on Test Set 
 model.eval()
@@ -323,8 +324,8 @@ for k in ("macro_auc", "micro_auc", "weighted_auc", "binary_auc"):
 # Saving ROC and PR Curves figures for paper
 y_true_onehot = np.eye(N_CLASSES, dtype=int)[all_y]  # (N, C)
 fig = plot_roc_pr_curves(y_true_onehot=y_true_onehot, y_prob=probs, class_names=CLASS_NAMES)
-tb_log_figure(writer, "eval/roc_pr_curves", fig, step=epoch)  # log at final epoch index
-fig.savefig(os.path.join(figs_dir, f"roc_pr_curves_epoch{epoch}.png"), dpi=300, bbox_inches="tight")
+tb_log_figure(writer, "eval/roc_pr_curves", fig, step=epoch_tag)  # log at final epoch index
+fig.savefig(os.path.join(figs_dir, f"roc_pr_curves_epoch{epoch_tag}.png"), dpi=300, bbox_inches="tight")
 
 # TensorBoard scalars
 epoch_tag = epoch  # tag with last epoch index
@@ -354,7 +355,7 @@ cm_fig = plot_confusion_matrix(
     annotate=True
 )
 writer.add_figure("eval/confusion_matrix_focused", cm_fig, epoch_tag)
-cm_fig.savefig(os.path.join(figs_dir, f"confusion_matrix_focused_epoch{epoch}.png"),
+cm_fig.savefig(os.path.join(figs_dir, f"confusion_matrix_focused_epoch{epoch_tag}.png"),
                dpi=300, bbox_inches="tight")
 
 # hparams summary

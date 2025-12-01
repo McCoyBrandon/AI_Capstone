@@ -1,12 +1,14 @@
 """
 TorchDrift integration helpers for the AI4I TinyTabTransformer pipeline.
 
-This module lets you:
-  - fit a TorchDrift detector on the training distribution
-  - evaluate drift on a target distribution (e.g., test/val)
-  - optionally log drift metrics to TensorBoard
+This module:
+  - fits a TorchDrift drift detector on the training distribution
+  - evaluates drift on the test (or production-like) distribution
+  - optionally logs drift metrics to TensorBoard
 """
+
 from typing import Dict, Optional
+
 import torch
 import torch.nn as nn
 
@@ -27,24 +29,50 @@ def _check_torchdrift_available():
         )
 
 
-class TabularDriftFeatureExtractor(nn.Module):
+class TabularFeatureExtractor(nn.Module):
     """
     Simple feature extractor for batches of the form:
         (xb_num, xb_type, yb)
 
     It concatenates numeric features with the categorical 'Type' code
     (cast to float) into a single feature vector per row.
-
-    This is a lightweight, model-agnostic representation; later you can
-    switch to TinyTabTransformer embeddings if you want.
     """
     def __init__(self):
         super().__init__()
 
-    def forward(self, batch):
-        xb_num, xb_type, *_ = batch
+    def forward(self, xb_num: torch.Tensor, xb_type: torch.Tensor) -> torch.Tensor:
+        """
+        xb_num:  [B, n_num] float32
+        xb_type: [B]       int64
+        returns: [B, n_num + 1] float32
+        """
         xb_type_f = xb_type.float().unsqueeze(-1)  # [B, 1]
-        return torch.cat([xb_num, xb_type_f], dim=1)  # [B, n_num+1]
+        return torch.cat([xb_num, xb_type_f], dim=1)
+
+
+def _collect_features(
+    dl,
+    feature_extractor: TabularFeatureExtractor,
+    device: torch.device,
+) -> torch.Tensor:
+    """
+    Iterate over a DataLoader that yields (xb_num, xb_type, yb),
+    and collect all extracted features into a single tensor.
+    """
+    feats = []
+    feature_extractor.eval()
+
+    with torch.no_grad():
+        for xb_num, xb_type, _ in dl:
+            xb_num = xb_num.to(device)
+            xb_type = xb_type.to(device)
+            z = feature_extractor(xb_num, xb_type)  # [B, d]
+            feats.append(z.cpu())
+
+    if not feats:
+        raise RuntimeError("DataLoader produced no batches when collecting features.")
+
+    return torch.cat(feats, dim=0)  # [N, d]
 
 
 def run_torchdrift_drift_check(
@@ -78,25 +106,35 @@ def run_torchdrift_drift_check(
     """
     _check_torchdrift_available()
 
-    feature_extractor = TabularDriftFeatureExtractor().to(device)
+    feature_extractor = TabularFeatureExtractor().to(device)
     drift_detector = KernelMMDDriftDetector().to(device)
 
-    # Fit reference distribution on training data
-    torchdrift.utils.fit(tr_dl, feature_extractor, drift_detector, device=device)
+    # --- 1) Fit reference distribution on training data ---
+    ref_feats = _collect_features(tr_dl, feature_extractor, device)  # [N_ref, d]
+    drift_detector.fit(ref_feats)
 
+    # --- 2) Evaluate drift on target/test data ---
     scores = []
     p_vals = []
 
-    for batch in te_dl:
-        features = feature_extractor(batch).to(device)
-        # Detector returns a scalar score per batch
-        score = drift_detector(features)
-        p_val = drift_detector.compute_p_value(features)
-        scores.append(score.detach().cpu())
-        p_vals.append(p_val.detach().cpu())
+    with torch.no_grad():
+        for xb_num, xb_type, _ in te_dl:
+            xb_num = xb_num.to(device)
+            xb_type = xb_type.to(device)
+            z = feature_extractor(xb_num, xb_type)  # [B, d]
 
-    scores_t = torch.stack(scores)
-    pvals_t = torch.stack(p_vals)
+            # For KernelMMDDriftDetector, calling it returns a scalar distance/score
+            score = drift_detector(z)
+            pval = drift_detector.compute_p_value(z)
+
+            scores.append(score.cpu())
+            p_vals.append(pval.cpu())
+
+    if not scores:
+        raise RuntimeError("Target DataLoader produced no batches when evaluating drift.")
+
+    scores_t = torch.stack(scores)  # [num_batches]
+    pvals_t = torch.stack(p_vals)   # [num_batches]
 
     metrics = {
         "score_mean": float(scores_t.mean().item()),
@@ -107,10 +145,13 @@ def run_torchdrift_drift_check(
         "pval_max": float(pvals_t.max().item()),
     }
 
+    # Optional: log to TensorBoard
     if writer is not None:
         writer.add_scalar(f"{tb_prefix}/score_mean", metrics["score_mean"], tb_step)
-        writer.add_scalar(f"{tb_prefix}/pval_mean", metrics["pval_mean"], tb_step)
-        writer.add_scalar(f"{tb_prefix}/pval_min", metrics["pval_min"], tb_step)
-        writer.add_scalar(f"{tb_prefix}/pval_max", metrics["pval_max"], tb_step)
+        writer.add_scalar(f"{tb_prefix}/score_min",  metrics["score_min"],  tb_step)
+        writer.add_scalar(f"{tb_prefix}/score_max",  metrics["score_max"],  tb_step)
+        writer.add_scalar(f"{tb_prefix}/pval_mean",  metrics["pval_mean"],  tb_step)
+        writer.add_scalar(f"{tb_prefix}/pval_min",   metrics["pval_min"],   tb_step)
+        writer.add_scalar(f"{tb_prefix}/pval_max",   metrics["pval_max"],   tb_step)
 
     return metrics
