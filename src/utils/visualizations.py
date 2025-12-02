@@ -106,7 +106,6 @@ def plot_pre_post_smote_counts(pre_counts: Sequence[int], post_counts: Sequence[
     return fig
 
 # Functions for data exploration
-
 def plot_feature_histograms(X: np.ndarray, feature_names: List[str],
                             y: Optional[Sequence[int]] = None,
                             class_names: Optional[List[str]] = None,
