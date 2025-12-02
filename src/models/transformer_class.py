@@ -25,8 +25,8 @@ NUM_COLS = [                      # 5 numeric features
 ]
 CAT_COL = "Type"                  # Single categorical feature (values like L/M/H)
 TARGET = "Machine failure"        # Binary target column (0 or 1)
-FAILURE_COLS = ["TWF", "HDF", "PWF", "OSF", "RNF"] # Columns for multi-classifcation
-CLASS_NAMES  = ["NoFailure", "TWF", "HDF", "PWF", "OSF", "RNF"] # Classifiers for multi-classification
+FAILURE_COLS = ["TWF", "HDF", "PWF", "OSF"]  # Columns for multi-classifcation (RNF removed)
+CLASS_NAMES  = ["NoFailure", "TWF", "HDF", "PWF", "OSF"]  # 5-way classification
 N_CLASSES    = len(CLASS_NAMES)
 
 # Hyperparameters for the model

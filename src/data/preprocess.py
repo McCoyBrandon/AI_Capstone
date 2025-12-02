@@ -36,8 +36,8 @@ NUM_COLS = [                      # 5 numeric features
 ]
 CAT_COL = "Type"                  # Single categorical feature (values like L/M/H)
 TARGET = "Machine failure"        # Binary target column (0 or 1)
-FAILURE_COLS = ["TWF", "HDF", "PWF", "OSF", "RNF"] # Columns for multi-classifcation
-CLASS_NAMES  = ["NoFailure", "TWF", "HDF", "PWF", "OSF", "RNF"] # Classifiers for multi-classification
+FAILURE_COLS = ["TWF", "HDF", "PWF", "OSF"]  # Columns for multi-classifcation (RNF removed)
+CLASS_NAMES  = ["NoFailure", "TWF", "HDF", "PWF", "OSF"]  # 5-way classification
 N_CLASSES    = len(CLASS_NAMES)
 
 # Hyperparameters for the model
@@ -266,6 +266,10 @@ def prepare_datasets(
     # 1) Read CSV and validate schema
     df = read_ai4i_csv(csv_path, validate_schema=validate_schema)
 
+    # 1b) Drop RNF failures so RNF is not part of the dataset or label space
+    if "RNF" in df.columns:
+        df = df[df["RNF"] == 0].reset_index(drop=True)
+    
     # 2) Build binary & multi-class targets
     y_bin, y_cls = build_targets(df)
 
@@ -285,7 +289,7 @@ def prepare_datasets(
     mean = norm_params.get("mean")
     std  = norm_params.get("std")
 
-    # 6) Optional: Apply SMOTE-NC to handle class imbalance (training split only)
+    # 6) Optional feature: Apply SMOTE-NC to handle class imbalance (training split only)
     if resample == "smote":
         Xn_tr, ty_tr, y_tr = smote_nc_resample(
             Xn_tr, ty_tr, y_tr,

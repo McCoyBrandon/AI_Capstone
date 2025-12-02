@@ -393,7 +393,7 @@ ckpt = {
         "num_cols": NUM_COLS,
         "cat_col": "Type",
         "target": TARGET,
-        "failure_cols": ["TWF", "HDF", "PWF", "OSF", "RNF"],
+        "failure_cols": ["TWF", "HDF", "PWF", "OSF"],
         "type_vocab": int(type_vocab),
         "standardize_mean": mean.tolist(),
         "standardize_std":  std.tolist(),
