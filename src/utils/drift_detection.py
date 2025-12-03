@@ -67,7 +67,7 @@ def _collect_features(
             xb_num = xb_num.to(device)
             xb_type = xb_type.to(device)
             z = feature_extractor(xb_num, xb_type)  # [B, d]
-            feats.append(z.cpu())
+            feats.append(z)
 
     if not feats:
         raise RuntimeError("DataLoader produced no batches when collecting features.")
@@ -92,7 +92,7 @@ def run_torchdrift_drift_check(
     tr_dl: DataLoader yielding (xb_num, xb_type, yb) for training data
     te_dl: DataLoader yielding (xb_num, xb_type, yb) for test/production-like data
     device: torch.device
-    writer: optional TensorBoard SummaryWriter for logging
+    writer: TensorBoard SummaryWriter for logging
     tb_step: scalar step/index used for TensorBoard (e.g., epoch or run index)
     tb_prefix: scalar name prefix for drift scalars
 
@@ -109,11 +109,11 @@ def run_torchdrift_drift_check(
     feature_extractor = TabularFeatureExtractor().to(device)
     drift_detector = KernelMMDDriftDetector().to(device)
 
-    # --- 1) Fit reference distribution on training data ---
+    # 1) Fit reference distribution on training data
     ref_feats = _collect_features(tr_dl, feature_extractor, device)  # [N_ref, d]
     drift_detector.fit(ref_feats)
 
-    # --- 2) Evaluate drift on target/test data ---
+    # 2) Evaluate drift on target/test data
     scores = []
     p_vals = []
 
@@ -145,7 +145,7 @@ def run_torchdrift_drift_check(
         "pval_max": float(pvals_t.max().item()),
     }
 
-    # Optional: log to TensorBoard
+    # log to TensorBoard
     if writer is not None:
         writer.add_scalar(f"{tb_prefix}/score_mean", metrics["score_mean"], tb_step)
         writer.add_scalar(f"{tb_prefix}/score_min",  metrics["score_min"],  tb_step)
@@ -153,5 +153,4 @@ def run_torchdrift_drift_check(
         writer.add_scalar(f"{tb_prefix}/pval_mean",  metrics["pval_mean"],  tb_step)
         writer.add_scalar(f"{tb_prefix}/pval_min",   metrics["pval_min"],   tb_step)
         writer.add_scalar(f"{tb_prefix}/pval_max",   metrics["pval_max"],   tb_step)
-
     return metrics
