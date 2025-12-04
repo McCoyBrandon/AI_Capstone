@@ -28,8 +28,7 @@ Outputs:
     - Console summary: accuracy / F1 / AUROC / confusion matrix
 
 Terminal run:
-    python -m src.training.eval --ckpt runs/ai4i_run_1/model.ckpt \
-                                --out  runs/ai4i_run_1/eval_pretrained_metrics.json
+    python -m src.training.eval --ckpt runs/ai4i_run_1/model.ckpt --out  runs/ai4i_run_1/eval_pretrained_metrics.json
 """
 
 

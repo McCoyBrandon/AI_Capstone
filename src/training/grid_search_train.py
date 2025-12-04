@@ -41,6 +41,7 @@ Performance Logging:
 
 Terminal Run:
     python -m src.training.grid_search_train
+    python -m src.training.grid_search_train --run_name <GIVEN_NAME>
 
 View the results:
     python -m tensorboard.main --logdir runs/<YOUR RUNS_NAME> --port 6006
@@ -362,18 +363,26 @@ def _product_dict(grid):
 
 def main():
     # Defining hyperparameter grid (expand as needed)
-    grid = {
-        "D_MODEL": [64, 128],
+    grid = { 
+        # architecture
+        "D_MODEL": [64, 128, 256],
         "NHEAD": [2, 4],
-        "LR": [1e-3, 3e-4],
-        "EPOCHS": [20],
         "DIM_FEEDFORWARD": [128, 256],
-        "DROPOUT": [0.0, 0.1],
         "NUM_LAYERS": [2, 3],
-        "WD": [0.0, 1e-4],
+        "DROPOUT": [0.0, 0.1],
+
+        # optimization
+        "LR": [1e-4, 3e-4, 1e-3, 5e-4],
+        "EPOCHS": [20],
+
+        # regularization
+        "WD": [0.0, 1e-5, 1e-4],
         "LABEL_SMOOTH": [0.0, 0.05],
-        "ENABLE_DRIFT": [True],
+
+        # monitoring
+        "ENABLE_DRIFT": [False],
     }
+
 
     best = None
     best_key = None

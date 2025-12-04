@@ -38,9 +38,8 @@ Key Functions and Sections:
     - Evaluation Block: Computes accuracy, F1, balanced accuracy, AUROC, etc.
     - TensorBoard Logging: Tracks loss, metrics, and confusion matrix
 
-Debugging test:
-    Terminal:
-        python -m src.training.train
+Usage:
+        python -m src.training.train --run_name Test_run_1
 """
 
 # Required Packages
@@ -48,21 +47,15 @@ import numpy as np
 import pandas as pd               
 import torch                     
 import torch.nn as nn             
-from torch.utils.data import TensorDataset, DataLoader, WeightedRandomSampler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import  accuracy_score, balanced_accuracy_score, classification_report, confusion_matrix, roc_auc_score, f1_score
 from sklearn.metrics import classification_report as cr
 import os, json
 # Added for TensorBoard and plotting
 from torch.utils.tensorboard import SummaryWriter
-import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
-import itertools
 import argparse
 
 ## Additional Reference code
-from src.models.transformer_class import TinyTabTransformer                   # model class
-from src.utils.metrics import compute_core_metrics, compute_auroc_metrics, confusion_matrix_figure
+from src.models.transformer_class import TinyTabTransformer                  
+from src.utils.metrics import compute_core_metrics, compute_auroc_metrics
 from src.utils.visualizations import plot_pre_post_smote_counts,plot_class_distribution,plot_roc_pr_curves,tb_log_figure, plot_confusion_matrix
 from src.utils.drift_detection import run_torchdrift_drift_check
 ## Data Processing
@@ -74,7 +67,7 @@ parser.add_argument(
     "--run_name",
     type=str,
     default="Test_run_1",
-    help="Name of the run folder under 'runs/'. Example: --run_name ai4i_run_1"
+    help="Name of the run folder under 'runs/'. Example: --run_name Test_run_1"
 )
 parser.add_argument("--d_model", type=int, default=64)
 parser.add_argument("--nhead", type=int, default=2)
@@ -185,8 +178,10 @@ mean          = data["mean"]
 std           = data["std"]
 
 # Hyperparameters for the model
+
+""" 
 BATCH  = 256                            # Mini-batch size for training/eval
-EPOCHS = 10                             # Number of passes over the training data
+EPOCHS = 40                             # Number of passes over the training data
 LR     = args.lr                        # Adam learning rate
 D_MODEL = args.d_model                  # Token embedding size (hidden size)
 NHEAD   = args.nhead                    # Number of attention heads (must divide D_MODEL)
@@ -195,6 +190,21 @@ DROPOUT = args.dropout
 NUM_LAYERS = args.num_layers
 WEIGHT_DECAY = args.weight_decay
 LABEL_SMOOTH = args.label_smoothing
+""" 
+# Section used for overriding directly from script
+# Best from grid search:
+# ('D128-H2-lr0.0005-wd1e-05-ls0.05-drift0', {'D_MODEL': 128, 'NHEAD': 2, 'DIM_FEEDFORWARD': 128, 'NUM_LAYERS': 3, 'DROPOUT': 0.0, 'LR': 0.0005, 'EPOCHS': 20, 'WD': 1e-05, 'LABEL_SMOOTH': 0.05, 'ENABLE_DRIFT': False}) score(macro_f1)= 0.7057910795445994     
+BATCH  = 256                            # Mini-batch size for training/eval
+EPOCHS = 40                             # Number of passes over the training data
+LR     = 0.0005                         # Adam learning rate
+D_MODEL = 128                           # Token embedding size (hidden size)
+NHEAD   = 2                             # Number of attention heads (must divide D_MODEL)
+DIM_FEEDFORWARD = 128
+DROPOUT = 0.0
+NUM_LAYERS = 3
+WEIGHT_DECAY = 1e-05
+LABEL_SMOOTH = 0.05
+#"""
 
 # Processing managagement
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if present, else CPU
