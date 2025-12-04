@@ -7,12 +7,13 @@
 ---
 
 ## Demo:
-In terminal at the root directory:
+
 [TO BE UPDATED SOON]
 
 
 ---
-## How to reproduce:
+## How to reproduce
+
 [TO BE UPDATED SOON]
 
 
@@ -21,7 +22,7 @@ In terminal at the root directory:
 
 ## Introduction
 
-Datacenter downtimes can cause huge financial losses and reputational damage. Notable examples include in 2017 when Amazon's S3 service was down for a few hours with an estimate of roughly $300 million in lost revenue for S&P 500 and U.S. financial-service companies. Another being in Australia in 2023 with the Optus outage that lasted about 11--12 hours. Optus is widely used by the government and private sectors, resulting in crucial services in public safety and logistics causing failed communications and heavy delays. Ultimately costing the company A$ 2 billion in stock, senate inquiry, and large reputation lost.
+Datacenter downtimes can cause huge financial losses and reputational damage. Notable examples include in 2017 when Amazon's S3 service was down for a few hours with an estimate of roughly \$300 million in lost revenue for S\&P 500 and U.S.\ financial-service companies. Another being in Australia in 2023 with the Optus outage that lasted about 11--12 hours. Optus is widely used by the government and private sectors, resulting in crucial services in public safety and logistics causing failed communications and heavy delays. Ultimately costing the company A\$ 2 billion in stock, senate inquiry, and large reputation lost.
 
 These downtimes can often be a result of cascading failures, in which one problem may spark a domino effect in poorly managed systems that results in a catastrophic failure incident. But having humans track second-by-second diagnostics for a datacenter with thousands of machines on a 24/7 basis can be expensive and may cost as much as the potential downtimes themselves. The need for a proactive machine failure tracking system that can be run by a small team and is more cost-efficient is increasingly important in the modern information age and cloud computing world.
 
