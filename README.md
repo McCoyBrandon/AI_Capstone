@@ -2,11 +2,12 @@
 # TabTransformer for Datacenter Equipment Failure Monitoring using SMOTE and Drift Detection
 
 **Authors:** Brandon McCoy
+
 **Date:** December 5, 2025  
 
 ---
 
-## Demo:
+## Demo
 
 [TO BE UPDATED SOON]
 
@@ -22,7 +23,7 @@
 
 ## Introduction
 
-Datacenter downtimes can cause huge financial losses and reputational damage. Notable examples include in 2017 when Amazon's S3 service was down for a few hours with an estimate of roughly \$300 million in lost revenue for S\&P 500 and U.S.\ financial-service companies. Another being in Australia in 2023 with the Optus outage that lasted about 11--12 hours. Optus is widely used by the government and private sectors, resulting in crucial services in public safety and logistics causing failed communications and heavy delays. Ultimately costing the company A\$ 2 billion in stock, senate inquiry, and large reputation lost.
+Datacenter downtimes can cause huge financial losses and reputational damage. Notable examples include in 2017 when Amazon's S3 service was down for a few hours with an estimate of roughly $300 million in lost revenue for S&P 500 and U.S. financial-service companies. Another being in Australia in 2023 with the Optus outage that lasted about 11–12 hours. Optus is widely used by the government and private sectors, resulting in crucial services in public safety and logistics causing failed communications and heavy delays. Ultimately costing the company A$2 billion in stock, senate inquiry, and large reputation lost.
 
 These downtimes can often be a result of cascading failures, in which one problem may spark a domino effect in poorly managed systems that results in a catastrophic failure incident. But having humans track second-by-second diagnostics for a datacenter with thousands of machines on a 24/7 basis can be expensive and may cost as much as the potential downtimes themselves. The need for a proactive machine failure tracking system that can be run by a small team and is more cost-efficient is increasingly important in the modern information age and cloud computing world.
 
@@ -53,4 +54,5 @@ This is where the Synthetic Minority Oversampling Technique (SMOTE) came in very
 
 As for the model selection, while reading the literature I found most examples of working with this dataset utilize decision trees, SVM, XGBoost, and ensemble methods. With decision trees being the most effective, however often having an overfitting problem. And after reading ‘Attentional is all you need’ I wanted to see how a transformer utilizing attention faired in comparison. That is where I found the TabTransformer and used it as my baseline architecture.  My model didn’t perform as well as those models claimed, but I also didn’t have extra datasets for training and didn’t to explore continued learning and utilization of the drift detection for hyper tuning.  Which are possible developments for the future and may be able to close the accuracy gap with less risk of overfitting.
 One of the concerns about using the SMOTE method is that real world changes in equipment or run-times may result in changing conditions in which the prediction effectiveness degrades, or original training data doesn’t fully represent real scenarios. That is why drift detection was additionally important in exploring. For this iteration it allows to diagnosis for model performance, but in future developments of continued learning it could be utilize to tune the model.
+
 ---
