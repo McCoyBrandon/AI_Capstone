@@ -1,86 +1,55 @@
 # AI_Capstone
-# On-Device Transformer for Datacenter Monitoring - Design Document
+# TabTransformer for Datacenter Equipment Failure Monitoring using SMOTE and Drift Detection
 
-**Authors:** Brandon McCoy and Venugopal Ponnamaneni  
-**Date:** September 5, 2025  
+**Authors:** Brandon McCoy
+**Date:** December 5, 2025  
 
 ---
 
 ## Demo:
 In terminal at the root directory:
-- python -m src.training.demo
+[TO BE UPDATED SOON]
 
+
+---
+## How to reproduce:
+[TO BE UPDATED SOON]
 
 
 
 ---
 
 ## Introduction
-Datacenter downtimes can cause huge financial losses. Having humans track second-by-second diagnostics for a datacenter with thousands of machines on a 24/7 basis can be expensive and may cost as much as the potential downtimes themselves. The need for a tracking system that can be run by a small team and is more cost-efficient is increasingly important in the modern world.
 
-This system can benefit datacenter administrators by enabling preemptive preventive maintenance, avoiding cascading failures, and maximizing the lifetime of expensive assets.  
+Datacenter downtimes can cause huge financial losses and reputational damage. Notable examples include in 2017 when Amazon's S3 service was down for a few hours with an estimate of roughly $300 million in lost revenue for S&P 500 and U.S. financial-service companies. Another being in Australia in 2023 with the Optus outage that lasted about 11--12 hours. Optus is widely used by the government and private sectors, resulting in crucial services in public safety and logistics causing failed communications and heavy delays. Ultimately costing the company A$ 2 billion in stock, senate inquiry, and large reputation lost.
 
-The expectation is that our transformer can run on a lightweight system that flags possible failure risk factors. It will operate in real time and flag potential failures for a system administrator to address and plan around.
-
----
-
-## Functional Requirements
-The system focuses on applying lightweight transformer models for predictive maintenance using the **AI4I 2020 dataset**. This dataset contains both numerical and categorical variables related to machine operating conditions such as temperature, rotational speed, torque, and tool wear. These inputs will be preprocessed and fed into the model, which is expected to classify whether a machine is at risk of failure.  
-
-Key requirements:
-- Minimum accuracy of **0.7** on the testing set (target: **0.8+**).  
-- Predictions are **binary** (failure or no failure).  
-- **Real-time inference** with latency under **1 second**.  
-- All predictions logged with timestamps for review.  
-- Deployment target: **NVIDIA Orin** or **Raspberry Pi**.  
-- Transformer size around **125 MB** to fit device constraints.  
-- Framework: **PyTorch**, with **TensorBoard** for visualization and **scikit-learn** preprocessing.  
-- A **custom-built model** (no pretrained available for this dataset).  
+These downtimes can often be a result of cascading failures, in which one problem may spark a domino effect in poorly managed systems that results in a catastrophic failure incident. But having humans track second-by-second diagnostics for a datacenter with thousands of machines on a 24/7 basis can be expensive and may cost as much as the potential downtimes themselves. The need for a proactive machine failure tracking system that can be run by a small team and is more cost-efficient is increasingly important in the modern information age and cloud computing world.
 
 ---
 
-## Non-Functional Requirements
-The non-functional requirements define quality standards for system behavior.  
+## Problem Definition
 
-- **Reliability:** Must provide consistent and trustworthy results. Evaluations will include test subsets for stability and repeatability.  
-- **Deployment:** Initially static (no retraining). Future versions may include **continuous learning** with new telemetry data.  
-- **Access Control:** Prediction results and telemetry restricted to system administrators. Real-world use may extend to **anonymization, encryption, and secure logging**.  
-- **Efficiency:** Must run effectively on constrained devices without exceeding CPU/memory budgets.  
-- **Interpretability:** Explore tools such as **LIME** for transparency, compression, and usability.  
+Given the diagnostic data in a tabular format for devices in a datacenter, the objective is to create a transformer that utilizes attention to accurately track for the risk of devices failing. While also addressing issues of class imbalance due to low classification counts in comparison to the overall data. The classification should come in two forms, firstly a binary ‘True’ or ‘False’ for risk of machine failure, and secondly a multi-class estimate for the type of failure. This includes tool wear failure (TWF), heat dissipation failure (HDF), power failure (PWF), and overstrain failure (OSF).  Additionally, there needs to be an output able to specify the machine ID that is being flagged with probability predicted of failure.  Ideally the prediction model should be able to run on a lightweight device.
+
 
 ---
 
-## System Design
-The proposed system is designed for **on-device inference** using compact hardware (NVIDIA Orin, Raspberry Pi). This eliminates dependency on cloud servers while balancing model complexity with efficiency.  
+## Methodology
 
-Core design elements:
-- **Lightweight transformer (~125 MB)** implemented in PyTorch.  
-- Input preprocessing with encoding and scaling (via scikit-learn).  
-- **TensorBoard** for monitoring training and logging.  
-- Modular design to allow future extensions (e.g., encryption/anonymization).  
-- Primary objective: **accurate, efficient, real-time predictions** for datacenter machine health.  
+This project implements a machine-learning pipeline designed to predict machine failure events and classify specific failure types using tabular diagnostic data from datacenter equipment. The workflow begins with extensive data preprocessing, including handling missing values, standardizing numerical features, and encoding categorical machine types. Because failure events are extremely rare relative to normal operating observations, the dataset exhibited a substantial class imbalance. Which would otherwise cause traditional models to overfit to the majority class and overlook critical minority patterns. To address this, the SMOTE (Synthetic Minority Oversampling Technique) algorithm was applied to generate realistic synthetic examples of under-represented failure categories. By interpolating between existing minority samples in feature space rather than duplicating records, SMOTE improves the density of minority regions and supports the learning of more effective classification boundaries.
+
+The core predictive model utilizes a TabTransformer architecture, which leverages multi-head self-attention to learn contextual relationships between tabular features. This approach allows the network to capture dependencies and interactions that linear and tree-based models may miss. The data was divided into training, validation, and separated test sets to reflect chronological behavior and prevent performance leakage. Because machine behavior and sensor distributions can evolve over time, a drift detection module was incorporated to monitor statistical distribution shifts and performance decay during inference. This could be could also be used to created indicator for model retraining or pipeline recalibration before significant degradation occurs.
+
+Model performance was evaluated using macro-F1 score, recall, precision, accuracy, and AUC-ROC, with additional focus on confusion matrix analysis to verify improvements in failure type classification sensitivity. Metrics were benchmarked both before and after SMOTE augmentation to quantify its impact. This integrated methodology supports early and reliable identification of high-risk machine conditions, which could be used by IT teams to enable proactive maintenance strategies and reducing the likelihood of unplanned downtime in large-scale datacenter environments.
 
 ---
 
-## Testing / Validation Plan
-Testing will use the **AI4I 2020 Predictive Maintenance Dataset**, split into training/validation/testing (70/15/15).  
+## Things of note
 
-Validation steps:
-- Ensure subsets represent balanced machine types and values.  
-- Binary classification evaluation (failure vs. no failure).  
-  - **Accuracy threshold:** <0.7 = fail, ≥0.8 = target success.  
-- If binary classification is satisfactory, extend to **multi-class failure prediction** using **AUROC metrics**.  
-- Measure **latency** (end-to-end) and **CPU utilization** (average/peak).  
-- Test on both **virtual machines** and target hardware (NVIDIA Orin or Raspberry Pi).  
+First and foremost, this project has been a great way to learn about how to deal with datasets that use continuous data that has a large amount of observations for ‘normal’ states (NoFailure for AI4I data) and a small amount of targeted events, such as machine failures for a datacenter with a large number of machines. The binary classifier of ‘Failure’ vs ‘NoFailure’ is reasonably achievable as it uses the sum of all the sub-categories of failures. But when getting granular with the failure types, using traditional class balancing technique such as weighting the class split for the train/text/validation datasets will not suffice.
 
----
+This is where the Synthetic Minority Oversampling Technique (SMOTE) came in very helpful. As it does not simply create duplicate records for the underrepresented classes, but instead uses a nearest neighbor method of generating synthetic observations for the underrepresented multi-class values.  This is then extrapolated out until the underrepresented failure types have equal representation between ‘NoFailure’ and each type of failure.
 
-## Contribution Statement
-**Brandon McCoy**  
-- Note-taking and tracking requirements for the outline.  
-- Wrote the **Introduction** and **Testing/Validation Plan** sections.  
-
-**Venugopal Ponnamaneni**  
-- Expanded the outline into the **Functional Requirements**, **Non-Functional Requirements**, and **System Design** sections.  
-
+As for the model selection, while reading the literature I found most examples of working with this dataset utilize decision trees, SVM, XGBoost, and ensemble methods. With decision trees being the most effective, however often having an overfitting problem. And after reading ‘Attentional is all you need’ I wanted to see how a transformer utilizing attention faired in comparison. That is where I found the TabTransformer and used it as my baseline architecture.  My model didn’t perform as well as those models claimed, but I also didn’t have extra datasets for training and didn’t to explore continued learning and utilization of the drift detection for hyper tuning.  Which are possible developments for the future and may be able to close the accuracy gap with less risk of overfitting.
+One of the concerns about using the SMOTE method is that real world changes in equipment or run-times may result in changing conditions in which the prediction effectiveness degrades, or original training data doesn’t fully represent real scenarios. That is why drift detection was additionally important in exploring. For this iteration it allows to diagnosis for model performance, but in future developments of continued learning it could be utilize to tune the model.
 ---
