@@ -1,31 +1,64 @@
--> SRC
---> data
----> __init__.py
----> ai4i2020.csv
----> data_loader.py
----> preprocess.py
---> Demo
----> Huggingface
-----> app.py
-----> README.md
-----> requirement.txt
----> demo.py
---> models
----> __init__.py
----> transformer_class.py
---> training
----> __init__.py
----> eval.py
----> train.py
----> grid_search_train.py
---> utils
----> __init__.py
--> tests
---> ai4i_run_1
----> eval_pretrained_metrics.json
----> metrics.json
----> model.ckpt
-infer.py
+->.github
+-->ci.yaml [blank]
+->configs
+-->train.yaml [blank]
+
+->runs
+-->main_save
+--->figs
+---->confusion_matrix_focused_epoch40.png
+---->pre_post_smote_counts.png
+---->roc_pr_curves_epoch40.png
+---->train_lables_post_bar.png
+---->tb
+---->metrics.json
+---->model.ckpt
+
+->docs
+-->mccoy_poster_presentation.pptx
+-->mccoy_poster_presentation.pdf
+-->Final_Techinical_Report.pdf
+
+->SRC
+-->data
+--->__init__.py
+--->ai4i2020.csv
+--->data_loader.py
+--->preprocess.py
+
+-->deploy
+--->infer.py
+--->demo
+---->demo.py
+---->Huggingface
+----->app.py
+----->README.md
+----->requirement.txt
+
+-->models
+--->__init__.py
+--->transformer_class.py
+
+-->training
+--->__init__.py
+--->eval.py
+--->train.py
+--->grid_search_train.py
+
+-->utils
+--->__init__.py
+--->check_grid_search.py
+--->metrics_viz.py
+--->metrics.py
+--->visualizations.py
+
+.dockerignore
+.gitignore
+build_multiarch.sh
 directory.txt
-README.md
+docker-test.yml
 dockerfile
+dvc.yaml
+makefile [BLANK]
+README.md
+requirements.txt

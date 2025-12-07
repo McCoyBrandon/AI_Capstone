@@ -13,11 +13,75 @@
 
 
 ---
-## How to reproduce
 
-[TO BE UPDATED SOON]
+## How to reproduce usking pre-organized MAKEFILE set up.
 
+These steps fully reproduce the project end-to-end in a fresh environment.
 
+---
+
+### 1. Clone & install dependencies
+
+```bash
+git clone <'https://github.com/McCoyBrandon/AI_Capstone'>
+cd AI_Capstone
+
+python -m venv .venv
+source .venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+### 2. Dataset 
+Ensure that the dataset is located in the data folder:
+src/data/ai4i2020.csv
+
+If not, you can download the dataset here:
+https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset
+
+### 3. Train
+Training uses a single command and saves logs + checkpoint under:
+runs/Test_run_1
+
+```bash
+make train
+```
+
+Tensorboard should auto-launch if avaliable. If not, run:
+```bash
+python -m tensorboard.main --logdir runs/Test_run_1/tb --port 6006
+```
+### 4. Evaluate a trained model
+
+Evaluate the model trained in step above:
+```bash
+make eval
+```
+
+This loads from the checkpoint:
+runs/Test_run_1/model.ckpt
+
+and writes results to:
+runs/Test_run_1/eval_metrics.json
+
+# 5. Optional: Inference demo
+To use the above checkpoint in an inference:
+```bash
+make infer
+```
+
+Which will output:
+runs/Test_run_1/demo_metrics.json
+runs/Test_run_1/flagged_failure.csv
+
+# 6. End-to-end summary:
+In order to demo the use of this repository and produce your own:
+```bash
+pip install -r requirements.txt
+make train
+make eval
+make infer
+```
 
 ---
 
@@ -32,6 +96,11 @@ These downtimes can often be a result of cascading failures, in which one proble
 ## Problem Definition
 
 Given the diagnostic data in a tabular format for devices in a datacenter, the objective is to create a transformer that utilizes attention to accurately track for the risk of devices failing. While also addressing issues of class imbalance due to low classification counts in comparison to the overall data. The classification should come in two forms, firstly a binary ‘True’ or ‘False’ for risk of machine failure, and secondly a multi-class estimate for the type of failure. This includes tool wear failure (TWF), heat dissipation failure (HDF), power failure (PWF), and overstrain failure (OSF).  Additionally, there needs to be an output able to specify the machine ID that is being flagged with probability predicted of failure.  Ideally the prediction model should be able to run on a lightweight device.
+
+
+---
+## Relevant work
+
 
 
 ---
