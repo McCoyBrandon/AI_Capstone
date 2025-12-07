@@ -3,7 +3,7 @@
 
 **Authors:** Brandon McCoy
 
-**Date:** December 5, 2025  
+**Date:** December 8, 2025  
 
 ---
 
@@ -59,9 +59,11 @@ make eval
 ```
 
 This loads from the checkpoint:
+
 runs/Test_run_1/model.ckpt
 
 and writes results to:
+
 runs/Test_run_1/eval_metrics.json
 
 # 5. Optional: Inference demo
@@ -82,6 +84,94 @@ make train
 make eval
 make infer
 ```
+---
+## How to reproduce usking Docker.
+The same end-to-end pipeline (train → eval → infer) can be run inside a Docker container.
+
+### 1. Build the image
+
+From the repo root:
+
+```bash
+docker build -t tabtransformer-ai4i .
+```
+
+### 2. Train the model
+
+The default command in the image runs training with run_name = Test_run_1.
+To train and keep outputs on your host machine:
+
+This will:
+
+- load src/data/ai4i2020.csv inside the container
+
+- preprocess (normalize + SMOTE)
+
+- train the TinyTabTransformer
+
+- write logs/checkpoints/figures into runs/Test_run_1/ 
+
+### 2. Evaluate the trained model
+
+Use the same image, but override the command to run the eval script:
+
+```bash
+docker run --rm \
+  -v "$(pwd)/runs:/app/runs" \
+  tabtransformer-ai4i \
+  python -m src.training.eval \
+    --ckpt runs/Test_run_1/model.ckpt \
+    --out  runs/Test_run_1/eval_metrics.json
+```
+This will:
+
+- mounts your runs/ directory into the container
+
+- loads runs/Test_run_1/model.ckpt
+
+- writes runs/Test_run_1/eval_metrics.json
+
+### 3. Run inference demo
+Similar to to above, for th einference you will run:
+
+```bash
+docker run --rm \
+  -v "$(pwd)/runs:/app/runs" \
+  -v "$(pwd)/src/data:/app/src/data" \
+  tabtransformer-ai4i \
+  python -m src.deploy.infer \
+    --ckpt runs/Test_run_1/model.ckpt \
+    --csv  src/data/ai4i2020.csv \
+    --out  runs/Test_run_1/demo_metrics.json \
+    --failures-csv runs/Test_run_1/flagged_failures.csv
+```
+Here we also mount src/data so the container can see ai4i2020.csv.
+
+### Docker summar:
+```bash
+docker build -t tabtransformer-ai4i .
+docker run --rm -v "$(pwd)/runs:/app/runs" tabtransformer-ai4i
+docker run --rm -v "$(pwd)/runs:/app/runs" tabtransformer-ai4i \
+  python -m src.training.eval \
+    --ckpt runs/Test_run_1/model.ckpt \
+    --out  runs/Test_run_1/eval_metrics.json
+docker run --rm \
+  -v "$(pwd)/runs:/app/runs" \
+  -v "$(pwd)/src/data:/app/src/data" \
+  tabtransformer-ai4i \
+  python -m src.deploy.infer \
+    --ckpt runs/Test_run_1/model.ckpt \
+    --csv  src/data/ai4i2020.csv \
+    --out  runs/Test_run_1/demo_metrics.json \
+    --failures-csv runs/Test_run_1/flagged_failures.csv
+```
+This mirrors the non-Docker workflow:
+
+- make train → train in container
+
+- make eval → eval in container (with command override)
+
+- make infer → infer in container (with command override)
 
 ---
 
