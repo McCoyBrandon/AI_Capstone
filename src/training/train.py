@@ -69,14 +69,17 @@ parser.add_argument(
     default="Test_run_1",
     help="Name of the run folder under 'runs/'. Example: --run_name Test_run_1"
 )
-parser.add_argument("--d_model", type=int, default=64)
+# Section used for providing defaults and prompt updates for to train data
+# Best from grid search:
+# ('D128-H2-lr0.0005-wd1e-05-ls0.05-drift0', {'D_MODEL': 128, 'NHEAD': 2, 'DIM_FEEDFORWARD': 128, 'NUM_LAYERS': 3, 'DROPOUT': 0.0, 'LR': 0.0005, 'EPOCHS': 20, 'WD': 1e-05, 'LABEL_SMOOTH': 0.05, 'ENABLE_DRIFT': False}) score(macro_f1)= 0.7057910795445994     
+parser.add_argument("--d_model", type=int, default=128)
 parser.add_argument("--nhead", type=int, default=2)
 parser.add_argument("--dim_feedforward", type=int, default=128)
 parser.add_argument("--dropout", type=float, default=0.0)
-parser.add_argument("--num_layers", type=int, default=2)
-parser.add_argument("--lr", type=float, default=1e-3)
-parser.add_argument("--weight_decay", type=float, default=0.0)
-parser.add_argument("--label_smoothing", type=float, default=0.00)
+parser.add_argument("--num_layers", type=int, default=3)
+parser.add_argument("--lr", type=float, default=0.0005)
+parser.add_argument("--weight_decay", type=float, default=1e-05)
+parser.add_argument("--label_smoothing", type=float, default=0.05)
 parser.add_argument("--enable_drift",action="store_true",help="If set, run TorchDrift drift detection after training.")
 args = parser.parse_args()
 RUN_NAME = args.run_name
@@ -178,8 +181,6 @@ mean          = data["mean"]
 std           = data["std"]
 
 # Hyperparameters for the model
-
-""" 
 BATCH  = 256                            # Mini-batch size for training/eval
 EPOCHS = 40                             # Number of passes over the training data
 LR     = args.lr                        # Adam learning rate
@@ -190,21 +191,6 @@ DROPOUT = args.dropout
 NUM_LAYERS = args.num_layers
 WEIGHT_DECAY = args.weight_decay
 LABEL_SMOOTH = args.label_smoothing
-""" 
-# Section used for overriding directly from script
-# Best from grid search:
-# ('D128-H2-lr0.0005-wd1e-05-ls0.05-drift0', {'D_MODEL': 128, 'NHEAD': 2, 'DIM_FEEDFORWARD': 128, 'NUM_LAYERS': 3, 'DROPOUT': 0.0, 'LR': 0.0005, 'EPOCHS': 20, 'WD': 1e-05, 'LABEL_SMOOTH': 0.05, 'ENABLE_DRIFT': False}) score(macro_f1)= 0.7057910795445994     
-BATCH  = 256                            # Mini-batch size for training/eval
-EPOCHS = 40                             # Number of passes over the training data
-LR     = 0.0005                         # Adam learning rate
-D_MODEL = 128                           # Token embedding size (hidden size)
-NHEAD   = 2                             # Number of attention heads (must divide D_MODEL)
-DIM_FEEDFORWARD = 128
-DROPOUT = 0.0
-NUM_LAYERS = 3
-WEIGHT_DECAY = 1e-05
-LABEL_SMOOTH = 0.05
-#"""
 
 # Processing managagement
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if present, else CPU
@@ -399,16 +385,38 @@ with open(os.path.join(out_dir, "metrics.json"), "w", encoding="utf-8") as f:
 ckpt = {
     "model_state_dict": model.state_dict(),
     "meta": {
+        # Data / labels
         "class_names": CLASS_NAMES,
         "num_cols": NUM_COLS,
         "cat_col": "Type",
         "target": TARGET,
         "failure_cols": ["TWF", "HDF", "PWF", "OSF"],
         "type_vocab": int(type_vocab),
+
+        # Normalization params
         "standardize_mean": mean.tolist(),
         "standardize_std":  std.tolist(),
+
+        # Model architecture
         "d_model": int(D_MODEL),
         "nhead": int(NHEAD),
+        "dim_feedforward": int(DIM_FEEDFORWARD),
+        "dropout": float(DROPOUT),
+        "num_layers": int(NUM_LAYERS),
+
+        # Training hyperparameters (for reproducibility)
+        "batch_size": int(BATCH),
+        "epochs": int(EPOCHS),
+        "lr": float(LR),
+        "weight_decay": float(WEIGHT_DECAY),
+        "label_smoothing": float(LABEL_SMOOTH),
+
+        # Preprocessing choices
+        "normalize": "zscore",
+        "resample": "smote",
+        "smote_k_neighbors": 5,
+        "smote_random_state": 42,
+        "smote_sampling": "auto",
     },
 }
 torch.save(ckpt, os.path.join(out_dir, "model.ckpt"))

@@ -75,10 +75,14 @@ OUT_PATH  = args.out
 ckpt = torch.load(CKPT_PATH, map_location=DEVICE)
 meta = ckpt["meta"]
 
-# Sanity: align dimensions with checkpoint meta
+# Align dimensions with checkpoint meta
+# Default to main_save parameters for backwards compatibility
 type_vocab = int(meta["type_vocab"])
-d_model    = int(meta["d_model"])
-nhead      = int(meta["nhead"])
+d_model        = int(meta.get("d_model", 128))
+nhead          = int(meta.get("nhead", 2))
+dim_feedforward = int(meta.get("dim_feedforward", 128))
+dropout         = float(meta.get("dropout", 0.0))
+num_layers      = int(meta.get("num_layers", 2))   # <- default 2 for old ckpt
 num_cols   = meta["num_cols"]
 class_names= meta["class_names"]
 n_classes  = len(class_names)
@@ -86,15 +90,24 @@ n_classes  = len(class_names)
 assert len(NUM_COLS) == len(num_cols), "NUM_COLS mismatch vs checkpoint."
 assert n_classes == N_CLASSES, "N_CLASSES mismatch vs checkpoint."
 
-### Rebuild Model & Load Weights
+# Architecture hyperparameters (with safe defaults for older checkpoints)
+dim_feedforward = int(meta.get("dim_feedforward", 128))
+dropout        = float(meta.get("dropout", 0.0))
+num_layers     = int(meta.get("num_layers", 2))
+
+# Rebuild Model & Load Weights
 model = TinyTabTransformer(
     n_num=len(NUM_COLS),
-    type_vocab=type_vocab,
+    type_vocab=int(meta["type_vocab"]),
     d_model=d_model,
-    nhead=nhead
+    nhead=nhead,
+    dim_feedforward=dim_feedforward,
+    dropout=dropout,
+    num_layers=num_layers,
 ).to(DEVICE)
 model.load_state_dict(ckpt["model_state_dict"])
 model.eval()
+
 
 ### Evaluation on Test Set (same style as train.py)
 all_logits, all_y = [], []

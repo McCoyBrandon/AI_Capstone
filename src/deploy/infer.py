@@ -101,15 +101,24 @@ if not os.path.exists(CKPT_PATH):
 ckpt = torch.load(CKPT_PATH, map_location=DEVICE)
 meta = ckpt["meta"]
 
-CLASS_NAMES = meta["class_names"]              # ["NoFailure","TWF",...]
-NUM_COLS    = meta["num_cols"]                 # numeric feature names (order matters)
-CAT_COL     = meta["cat_col"]                  # "Type"
-TARGET      = meta["target"]                   # "Machine failure"
-FAILURE_COLS= meta["failure_cols"]             # ["TWF","HDF",...]
-TYPE_VOCAB  = int(meta["type_vocab"])          # e.g., 3 for L/M/H
-D_MODEL     = int(meta["d_model"])
-NHEAD       = int(meta["nhead"])
-N_CLASSES   = len(CLASS_NAMES)
+# Default to main_save parameters for backwards compatibility
+NUM_COLS    = meta["num_cols"]
+TYPE_VOCAB  = int(meta["type_vocab"])
+d_model        = int(meta.get("d_model", 128))
+nhead          = int(meta.get("nhead", 2))
+dim_feedforward = int(meta.get("dim_feedforward", 128))
+dropout         = float(meta.get("dropout", 0.0))
+num_layers      = int(meta.get("num_layers", 2))
+
+
+# Normalization params
+mean = np.asarray(meta["standardize_mean"], dtype=np.float32)
+std  = np.asarray(meta["standardize_std"],  dtype=np.float32)
+
+# Architecture hyperparameters (with defaults for older ckpts)
+DIM_FEEDFORWARD = int(meta.get("dim_feedforward", 128))
+DROPOUT         = float(meta.get("dropout", 0.0))
+NUM_LAYERS      = int(meta.get("num_layers", 2))
 
 
 # Read + validate schema, then build targets/features using shared helpers
@@ -125,7 +134,6 @@ _, Xn_te, _, ty_te, _, y_te, _, yb_te, _, idx_te = train_test_split(
     X_num, cat_idx, y_cls, y_bin, row_idx,  # Added the row index which won't be used by the model, but can be used to backtrack to the productID
     test_size=0.20, random_state=42, stratify=y_cls   # Splitting hyperparameters
 )
-
 
 # Standardize numeric features using TRAIN statistics from checkpoint meta
 mean = np.array(meta["standardize_mean"], dtype=np.float32)
@@ -143,6 +151,9 @@ model = TinyTabTransformer(
     type_vocab=TYPE_VOCAB,
     d_model=D_MODEL,
     nhead=NHEAD,
+    dim_feedforward=DIM_FEEDFORWARD,
+    dropout=DROPOUT,
+    num_layers=NUM_LAYERS,
 ).to(DEVICE)
 model.load_state_dict(ckpt["model_state_dict"])
 model.eval()
