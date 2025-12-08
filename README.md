@@ -77,7 +77,7 @@ In the demo you can:
 
 ---
 
-## How to reproduce usking Windows Command Prompt or PowerShell pre-organized MAKEFILE set up.
+## How to reproduce usking Windows Command Prompt or PowerShell.
 
 These steps fully reproduce the project end-to-end in a fresh environment.
 
