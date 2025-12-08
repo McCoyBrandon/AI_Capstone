@@ -10,10 +10,6 @@
 Additional terminal usage notes on top of relevant files.
 
 AI_Capstone/
-- .github/
-  - ci.yaml
-- configs/
-  - train.yaml
 - runs/
   - main_save/
     - figs/
@@ -25,21 +21,45 @@ AI_Capstone/
     - metrics.json
     - model.ckpt
 - docs/
-  - mccoy_poster_presentation.pptx
-  - mccoy_poster_presentation.pdf
-  - Final_Techinical_Report.pdf
+  - Individual Reflection
+    - Includues the individual Reflection paper in .tex and pdf.
+  - Technical Document
+    - Provides the materials used in Overleaf to create the Techincal Document
+    - Includues the final report in PDF
+  - figures
+    - includes various figures used in documentation
+  - Poster Presentation
+    - mccoy_poster_presentation.pptx
+    - mccoy_poster_presentation.pdf
+  - Project_Planning.txt
 - src/
   - data/
+    - ai4i2020.csv  # dataset utilized
+    - data_explore.py
+    - preprocess.py
   - deploy/
+    - Demo
+      - Includes files for HuggingFace demo
+    - infer.py
   - models/
+    - transformer_class.py
   - training/
+    - eval.py
+    - grid_search_train.py
+    - train.py
   - utils/
+    - check_grid_search.py
+    - drift_detection.py
+    - metrics.py
+    - metrics_viz.py
+    - visualizations.py
 - docker-test.yml
 - dockerfile
 - dvc.yaml
 - makefile
 - requirements.txt
 - README.md
+- run_docker.sh
 
 ---
 
