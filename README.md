@@ -23,7 +23,7 @@ AI_Capstone/
 │     │  ├─ pre_post_smote_counts.png
 │     │  ├─ roc_pr_curves_epoch40.png
 │     │  ├─ train_lables_post_bar.png
-│     │  └─ tb/          # TensorBoard logs
+│     │  └─ tb/          
 │     ├─ metrics.json
 │     └─ model.ckpt      # Final model checkpoint
 │
@@ -39,7 +39,7 @@ AI_Capstone/
 │  │  └─ preprocess.py
 │  │
 │  ├─ deploy/
-│  │  ├─ infer.py          # Deployment‐style inference script
+│  │  ├─ infer.py         
 │  │  └─ demo/
 │  │     ├─ demo.py
 │  │     └─ Huggingface/
