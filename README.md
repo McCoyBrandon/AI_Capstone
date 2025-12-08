@@ -6,6 +6,71 @@
 **Date:** December 8, 2025  
 
 ---
+## Directory
+Additional terminal usage notes on top of relevant files.
+
+AI_Capstone/
+├─ .github/
+│  └─ ci.yaml
+│
+├─ configs/
+│  └─ train.yaml
+│
+├─ runs/
+│  └─ main_save/
+│     ├─ figs/
+│     │  ├─ confusion_matrix_focused_epoch40.png
+│     │  ├─ pre_post_smote_counts.png
+│     │  ├─ roc_pr_curves_epoch40.png
+│     │  ├─ train_lables_post_bar.png
+│     │  └─ tb/          # TensorBoard logs
+│     ├─ metrics.json
+│     └─ model.ckpt      # Final model checkpoint
+│
+├─ docs/
+│  ├─ mccoy_poster_presentation.pptx
+│  ├─ mccoy_poster_presentation.pdf
+│  └─ Final_Techinical_Report.pdf
+│
+├─ src/
+│  ├─ data/
+│  │  ├─ ai4i2020.csv
+│  │  ├─ data_loader.py
+│  │  └─ preprocess.py
+│  │
+│  ├─ deploy/
+│  │  ├─ infer.py          # Deployment‐style inference script
+│  │  └─ demo/
+│  │     ├─ demo.py
+│  │     └─ Huggingface/
+│  │        ├─ app.py
+│  │        ├─ README.md
+│  │        └─ requirement.txt
+│  │
+│  ├─ models/
+│  │  └─ transformer_class.py   # TinyTabTransformer architecture
+│  │
+│  ├─ training/
+│  │  ├─ train.py          # Main trainer
+│  │  ├─ grid_search_train.py
+│  │  └─ eval.py           # Evaluation script
+│  │
+│  └─ utils/
+│     ├─ check_grid_search.py
+│     ├─ metrics.py
+│     ├─ metrics_viz.py
+│     └─ visualizations.py
+│
+├─ .dockerignore
+├─ .gitignore
+├─ docker-test.yml
+├─ dockerfile
+├─ dvc.yaml
+├─ makefile
+├─ requirements.txt
+└─ README.md
+
+---
 
 ## Interactive Demo (Hugging Face)
 
@@ -147,7 +212,7 @@ This will:
 - writes runs/Test_run_1/eval_metrics.json
 
 ### 3. Run inference demo
-Similar to to above, for th einference you will run:
+Similar to to above, for the inference you will run:
 
 ```bash
 docker run --rm \
