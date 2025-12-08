@@ -103,22 +103,19 @@ meta = ckpt["meta"]
 
 # Default to main_save parameters for backwards compatibility
 NUM_COLS    = meta["num_cols"]
-TYPE_VOCAB  = int(meta["type_vocab"])
-d_model        = int(meta.get("d_model", 128))
-nhead          = int(meta.get("nhead", 2))
-dim_feedforward = int(meta.get("dim_feedforward", 128))
-dropout         = float(meta.get("dropout", 0.0))
-num_layers      = int(meta.get("num_layers", 2))
+CLASS_NAMES = meta["class_names"]
+N_CLASSES   = len(CLASS_NAMES)
 
+TYPE_VOCAB      = int(meta["type_vocab"])
+D_MODEL         = int(meta.get("d_model", 128))
+NHEAD           = int(meta.get("nhead", 2))
+DIM_FEEDFORWARD = int(meta.get("dim_feedforward", 128))
+DROPOUT         = float(meta.get("dropout", 0.0))
+NUM_LAYERS      = int(meta.get("num_layers", 2))
 
 # Normalization params
 mean = np.asarray(meta["standardize_mean"], dtype=np.float32)
 std  = np.asarray(meta["standardize_std"],  dtype=np.float32)
-
-# Architecture hyperparameters (with defaults for older ckpts)
-DIM_FEEDFORWARD = int(meta.get("dim_feedforward", 128))
-DROPOUT         = float(meta.get("dropout", 0.0))
-NUM_LAYERS      = int(meta.get("num_layers", 2))
 
 
 # Read + validate schema, then build targets/features using shared helpers
