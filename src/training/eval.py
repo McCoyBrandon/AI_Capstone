@@ -150,9 +150,3 @@ os.makedirs(os.path.dirname(OUT_PATH) or ".", exist_ok=True)
 with open(OUT_PATH, "w", encoding="utf-8") as f:
     json.dump(out_payload, f, indent=2)
 print(f"\nSaved eval metrics to: {OUT_PATH}")
-
-
-os.makedirs(os.path.dirname(OUT_PATH) or ".", exist_ok=True)
-with open(OUT_PATH, "w", encoding="utf-8") as f:
-    json.dump(metrics, f, indent=2)
-print(f"\nSaved eval metrics to: {OUT_PATH}")
