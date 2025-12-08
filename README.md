@@ -261,8 +261,11 @@ Given the diagnostic data in a tabular format for devices in a datacenter, the o
 
 ---
 ## Relevant work
+To start is the paper that the AI4I dataset was published with.[1] The authors published this dataset because it is hard to get datacenter diagnostic data, as it is hard to get this type of dataset from the private sector that keeps it as proprietary. It was helpful in understanding the parameters that they were providing and some context they found in their own exploratory data analysis.
 
+I then sought out literature on approaches that have attempted to utilize this data for various approaches. The first paper, “Leveraging Safe and Secure AI for Predictive Maintenance of Mechanical Devices Using Incremental Learning and Drift Detection,” this paper was an interesting read on their methods with random forest, SVM, and DNN. They used incremental learning and drift detection and was great introduction into some of the difficulties they had with using this data.  I found, "Exploring ML for Predictive Maintenance Using Imbalance Correction techniques and SHAP'[3] to also be helpful. Where the both papers addressed the class imbalance issue with the dataset utilizing the SMOTE method, the second paper provided comparisons of with and without SMOTE to show the clear advantages of over sampling for the training of their models.
 
+Dr. Flavio Esposito recommended I read the paper "Attention is All You Need"[4].   I found this paper intriguing, and I noticed that the previous work I read on this dataset did not mention transformers. Therefore, I did some more research on transformers and specifically found papers on transformers that work well with tabular data, [5][6]. And to differentiate my work frome previous related work, I decided I wanted to attempt a model that not only provided the binary classification, but attempt to address the failure types and see how how an attention model handles it.
 
 ---
 
@@ -284,5 +287,22 @@ This is where the Synthetic Minority Oversampling Technique (SMOTE) came in very
 
 As for the model selection, while reading the literature I found most examples of working with this dataset utilize decision trees, SVM, XGBoost, and ensemble methods. With decision trees being the most effective, however often having an overfitting problem. And after reading ‘Attentional is all you need’ I wanted to see how a transformer utilizing attention faired in comparison. That is where I found the TabTransformer and used it as my baseline architecture.  My model didn’t perform as well as those models claimed, but I also didn’t have extra datasets for training and didn’t to explore continued learning and utilization of the drift detection for hyper tuning.  Which are possible developments for the future and may be able to close the accuracy gap with less risk of overfitting.
 One of the concerns about using the SMOTE method is that real world changes in equipment or run-times may result in changing conditions in which the prediction effectiveness degrades, or original training data doesn’t fully represent real scenarios. That is why drift detection was additionally important in exploring. For this iteration it allows to diagnosis for model performance, but in future developments of continued learning it could be utilize to tune the model.
+
+---
+
+## References
+
+[1] S. Matzka, “Explainable Artificial Intelligence for Predictive Maintenance Applications,” in *Proc. 2020 3rd Int. Conf. Artificial Intelligence for Industries (AI4I)*, 2020, pp. 69–74.
+
+[2] P. B. S, M. K. M. V., N. Almuraqab, and P. B. H, “Leveraging Safe and Secure AI for Predictive Maintenance of Mechanical Devices Using Incremental Learning and Drift Detection,” Comput. Mater. Contin., vol. 83, no. 3, pp. 4979–4998, 2025.
+
+[3] K. Patel and A. D. Shanbhag, “Exploring ML for Predictive Maintenance Using Imbalance Correction Techniques and SHAP,” in *Proc. 2022 Int. Conf. Electrical, Computer and Energy Technologies (ICECET)*, 2022, pp. 1–10.
+
+[4] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, L. Kaiser, and I. Polosukhin, “Attention Is All You Need,” arXiv preprint arXiv:1706.03762, 2023.
+
+[5] Y. Gorishniy, I. Rubachev, V. Khrulkov, and A. Babenko, “Revisiting Deep Learning Models for Tabular Data,” arXiv preprint arXiv:2106.11959, 2023.
+
+[6] X. Huang, A. Khetan, M. Cvitkovic, and Z. Karnin, “TabTransformer: Tabular Data Modeling Using Contextual Embeddings,” arXiv preprint arXiv:2012.06678, 2020.
+
 
 ---
