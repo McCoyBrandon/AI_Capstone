@@ -7,14 +7,21 @@
 
 ---
 
-## Demo
+## Interactive Demo (Hugging Face)
 
-[TO BE UPDATED SOON]
+An interactive version of this project is hosted as a Hugging Face Space, which allows you to test the TabTransformer model directly in your browser without installing anything locally.
 
+**Live Demo:**  
+https://huggingface.co/spaces/mccoybs/Machine_Failure_Prediction_Demo
+
+In the demo you can:
+- Adjust feature values (machine type, temperature, torque, etc.)
+- Perform inference with the latest trained model
+- View predicted failure type and individual class probabilities
 
 ---
 
-## How to reproduce usking pre-organized MAKEFILE set up.
+## How to reproduce usking Windows Command Prompt or PowerShell pre-organized MAKEFILE set up.
 
 These steps fully reproduce the project end-to-end in a fresh environment.
 
@@ -23,39 +30,38 @@ These steps fully reproduce the project end-to-end in a fresh environment.
 ### 1. Clone & install dependencies
 
 ```bash
-git clone <'https://github.com/McCoyBrandon/AI_Capstone'>
+git clone https://github.com/McCoyBrandon/AI_Capstone
 cd AI_Capstone
 
 python -m venv .venv
-source .venv/bin/activate
-
+.\.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 ### 2. Dataset 
 Ensure that the dataset is located in the data folder:
-src/data/ai4i2020.csv
+```bash
+AI_Capstone/src/data/ai4i2020.csv
+```
 
 If not, you can download the dataset here:
 https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset
 
 ### 3. Train
 Training uses a single command and saves logs + checkpoint under:
-runs/Test_run_1
+AI_Capstone/runs/Test_run_1
 
 ```bash
-make train
+python -m src.training.train
 ```
 
-Tensorboard should auto-launch if avaliable. If not, run:
-```bash
-python -m tensorboard.main --logdir runs/Test_run_1/tb --port 6006
-```
 ### 4. Evaluate a trained model
 
 Evaluate the model trained in step above:
 ```bash
-make eval
+python -m src.training.eval `
+  --ckpt runs/Test_run_1/model.ckpt `
+  --out  runs/Test_run_1/eval_metrics.json
 ```
 
 This loads from the checkpoint:
@@ -69,7 +75,11 @@ runs/Test_run_1/eval_metrics.json
 # 5. Optional: Inference demo
 To use the above checkpoint in an inference:
 ```bash
-make infer
+python -m src.deploy.infer `
+  --ckpt runs/Test_run_1/model.ckpt `
+  --csv  src/data/ai4i2020.csv `
+  --out  runs/Test_run_1/demo_metrics.json `
+  --failures-csv runs/Test_run_1/flagged_failures.csv
 ```
 
 Which will output:
@@ -79,10 +89,15 @@ runs/Test_run_1/flagged_failure.csv
 # 6. End-to-end summary:
 In order to demo the use of this repository and produce your own:
 ```bash
+git clone https://github.com/McCoyBrandon/AI_Capstone
+cd AI_Capstone
+python -m venv .venv
+.\.venv\Scripts\activate
 pip install -r requirements.txt
-make train
-make eval
-make infer
+
+python -m src.training.train
+python -m src.training.eval --ckpt runs/Test_run_1/model.ckpt --out runs/Test_run_1/eval_metrics.json
+python -m src.deploy.infer --ckpt runs/Test_run_1/model.ckpt --csv src/data/ai4i2020.csv --out runs/Test_run_1/demo_metrics.json
 ```
 ---
 ## How to reproduce usking Docker.

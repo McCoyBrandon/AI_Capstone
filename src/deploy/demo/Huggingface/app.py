@@ -23,8 +23,8 @@ import gradio as gr
 from transformer_class import TinyTabTransformer  
 
 # ---- Paths (you can change these via HF "Files" tab or env vars) ----
-CKPT_PATH = os.getenv("CKPT_PATH", "runs/ai4i_run_1/model.ckpt")
-CSV_PATH  = os.getenv("CSV_PATH",  "src/data/ai4i2020.csv")
+CKPT_PATH = os.getenv("CKPT_PATH", "model.ckpt")
+CSV_PATH  = os.getenv("CSV_PATH",  "ai4i2020.csv")
 
 # Defaults 
 NUM_COLS = [
@@ -77,16 +77,39 @@ def derive_ui_specs(csv_path: str, meta: dict):
         types = ["L", "M", "H"]
     return num_bounds, types
 
+def infer_num_layers_from_state(state_dict: dict, default: int = 2) -> int:
+    """
+    Inspect the state_dict to infer how many TransformerEncoder layers there are.
+    Looks for keys like 'encoder.layers.0.*', 'encoder.layers.1.*', ...
+    """
+    layer_indices = []
+    for k in state_dict.keys():
+        if k.startswith("encoder.layers."):
+            parts = k.split(".")
+            # encoder.layers.<idx>.self_attn...
+            if len(parts) > 2 and parts[2].isdigit():
+                layer_indices.append(int(parts[2]))
+    if not layer_indices:
+        return default
+    return max(layer_indices) + 1
 
 # Build model for inference
 def build_model(meta: dict, ckpt: dict):
+    state = ckpt["model_state_dict"]
+    num_layers = infer_num_layers_from_state(state_dict=state, default=2)
+
     model = TinyTabTransformer(
         n_num=len(meta["num_cols"]),
         type_vocab=int(meta["type_vocab"]),
         d_model=int(meta["d_model"]),
         nhead=int(meta["nhead"]),
+        # these match your training defaults; adjust if you ever change them
+        dim_feedforward=128,
+        dropout=0.0,
+        num_layers=num_layers,
     ).to(DEVICE)
-    model.load_state_dict(ckpt["model_state_dict"])
+
+    model.load_state_dict(state)
     model.eval()
     return model
 
@@ -128,10 +151,12 @@ def predict_once(inputs: dict, model: nn.Module, meta: dict):
         logits = model(xb, tb)         # [1, C]
         probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
 
-    class_names = meta["class_names"]     # ["NoFailure","TWF","HDF","PWF","OSF","RNF"]
+    # class_names comes from the checkpoint meta; for the current model this is:
+    # ["NoFailure", "TWF", "HDF", "PWF", "OSF"]
+    class_names = meta["class_names"]
     pred_idx = int(np.argmax(probs))
     pred_name = class_names[pred_idx]
-    p_any_failure = float(probs[1:].sum())
+    p_any_failure = float(probs[1:].sum())  # sum of all non-NoFailure classes
 
     # Binary failure decision
     fail_bool = pred_idx != 0 or p_any_failure >= 0.5
@@ -192,4 +217,4 @@ def make_interface():
 
 if __name__ == "__main__":
     demo = make_interface()
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(server_name="0.0.0.0", server_port=7860,share=True)
