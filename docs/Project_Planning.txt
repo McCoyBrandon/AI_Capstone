@@ -57,3 +57,32 @@ c. Collaborate on the TensorBoard with Venugopal
 a. Finalize computing metrics on the evaluation run
 b. Start on the TensorBoard usage in the training and evaluation runs
 c. Review documentation and commenting
+
+Sprint 7 - Starting week of 10/28/2025, ending 11/4/2025
+1. Brandon
+a. Updated a new preprocess.py file that allows for data processing for any csv that matches the headers of the ai4i dataset.
+b. Consolidated some of the metrics variables into a metrics.py under utilities
+c. Updated train.py, grid_search_train.py, eval.py, and infer.py to use the new preprocess.py and metrics.py to complete the work pipeline for training.
+d. Updated the Docker file to include multiple pipelines so that the Docker can be run to do specific tasks. 
+
+Sprint 8 - Starting week of 11/4/2025, ending 11/11/2025
+1. Brandon
+a. Further error resolution and testing Docker and being able to run on different VM types
+b. Work on repository documentation towards a semi-final level now that the central framework is complete.
+c. Writing draft for the paper/presentation
+d. Additional training test runs
+
+Sprint 9 - Starting week of 11/11/2025, ending 11/18/2025
+1. Brandon
+a. Set up TorchDrift
+b. Setting up evaluation steps for TorchDrift
+c. See if continued integration can be set up in reasonable amount of time before end of project.
+
+Sprint 10/11 - Starting week of 11/18/2025, ending 12/2/2025 (Including Thanksgiving break)
+1. Expand on visualization outputs for presentation and paper
+2. Expanded hyperparameters for grid search training.
+3. Ran grid searches over night and first drafts on Poster Presentation and paper
+
+Sprint 12 - Starting week of 12/2/2025
+1. Poster presentation
+2. Finalization of final deliverables
