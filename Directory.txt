@@ -1,64 +1,50 @@
-->.github
--->ci.yaml [blank]
-->configs
--->train.yaml [blank]
-
-->runs
--->main_save
---->figs
----->confusion_matrix_focused_epoch40.png
----->pre_post_smote_counts.png
----->roc_pr_curves_epoch40.png
----->train_lables_post_bar.png
----->tb
----->metrics.json
----->model.ckpt
-
-->docs
--->mccoy_poster_presentation.pptx
--->mccoy_poster_presentation.pdf
--->Final_Techinical_Report.pdf
-
-->SRC
--->data
---->__init__.py
---->ai4i2020.csv
---->data_loader.py
---->preprocess.py
-
--->deploy
---->infer.py
---->demo
----->demo.py
----->Huggingface
------>app.py
------>README.md
------>requirement.txt
-
--->models
---->__init__.py
---->transformer_class.py
-
--->training
---->__init__.py
---->eval.py
---->train.py
---->grid_search_train.py
-
--->utils
---->__init__.py
---->check_grid_search.py
---->metrics_viz.py
---->metrics.py
---->visualizations.py
-
-.dockerignore
-.gitignore
-build_multiarch.sh
-directory.txt
-docker-test.yml
-dockerfile
-dvc.yaml
-makefile [BLANK]
-README.md
-requirements.txt
+- runs/
+  - main_save/
+    - figs/
+      - confusion_matrix_focused_epoch40.png
+      - pre_post_smote_counts.png
+      - roc_pr_curves_epoch40.png
+      - train_lables_post_bar.png
+      - tb/
+    - metrics.json
+    - model.ckpt
+- docs/
+  - Individual Reflection
+    - Includues the individual Reflection paper in .tex and pdf.
+  - Technical Document
+    - Provides the materials used in Overleaf to create the Techincal Document
+    - Includues the final report in PDF
+  - figures
+    - includes various figures used in documentation
+  - Poster Presentation
+    - mccoy_poster_presentation.pptx
+    - mccoy_poster_presentation.pdf
+  - Project_Planning.txt
+- src/
+  - data/
+    - ai4i2020.csv  # dataset utilized
+    - data_explore.py
+    - preprocess.py
+  - deploy/
+    - Demo
+      - Includes files for HuggingFace demo
+    - infer.py
+  - models/
+    - transformer_class.py
+  - training/
+    - eval.py
+    - grid_search_train.py
+    - train.py
+  - utils/
+    - check_grid_search.py
+    - drift_detection.py
+    - metrics.py
+    - metrics_viz.py
+    - visualizations.py
+- docker-test.yml
+- dockerfile
+- dvc.yaml
+- makefile
+- requirements.txt
+- README.md
+- run_docker.sh
